@@ -42,12 +42,10 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         return 0;
 
     case WM_CLOSE:
-#ifdef _DEBUG
-        break;
-#else
+        if (wcsstr(GetCommandLine(), L" --exit-on-close-button"))
+            break;
         ShowWindow(hwnd, SW_HIDE);
         return 0; // to not process message by the system, which call DestroyWindow in DefWindowProc
-#endif
 
     case WM_TRAY:
         switch (lparam)
