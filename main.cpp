@@ -49,7 +49,7 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         switch (lparam)
         {
         case WM_LBUTTONDBLCLK:
-            ShowWindow(hwnd, SW_SHOW);
+            ShowWindow(hwnd, SW_NORMAL);
             SetForegroundWindow(hwnd);
             break;
 
@@ -62,7 +62,7 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 switch (TrackPopupMenu(sub_menu, TPM_LEFTALIGN|TPM_BOTTOMALIGN|TPM_RIGHTBUTTON|TPM_NONOTIFY|TPM_RETURNCMD, curpos.x, curpos.y, 0, hwnd, NULL))
                 {
                 case IDM_SHOWMAINWINDOW:
-                    ShowWindow(hwnd, SW_SHOW);
+                    ShowWindow(hwnd, SW_NORMAL);
                     SetForegroundWindow(hwnd);
                     break;
                 case IDM_EXIT:
@@ -114,7 +114,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     MSG msg;
     BOOL ret;
     // [https://docs.microsoft.com/ru-ru/windows/win32/winmsg/using-messages-and-message-queues]
-    while((ret = GetMessage(&msg, NULL, 0, 0 )) != 0) {
+    while ((ret = GetMessage(&msg, NULL, 0, 0)) != 0) {
         if (ret == -1) {
             ERROR;
         }
