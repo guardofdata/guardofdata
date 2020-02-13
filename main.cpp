@@ -1,14 +1,14 @@
 ﻿#include "precompiled.h"
 #include "resource.h"
+#include "tabs.h"
 
 const UINT WM_TRAY = WM_USER;
 #define RECTARGS(rect) (rect).left, (rect).top, (rect).right-(rect).left, (rect).bottom-(rect).top
 
-#undef ERROR
-#define ERROR do {} while(false)
-
 HINSTANCE h_instance;
 HWND main_wnd;
+std::vector<std::unique_ptr<Button>> tab_buttons;
+std::unique_ptr<Tab> current_tab;
 
 LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
@@ -76,6 +76,23 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
             break;
         }
         return 0;
+
+    case WM_COMMAND:
+        switch (WORD cid = LOWORD(wparam))
+        {
+        case IDB_TAB_BACKUP:
+        case IDB_TAB_PROGRESS:
+        case IDB_TAB_LOG:
+            for (auto &&tab_button : tab_buttons)
+                tab_button->select(tab_button->id == cid);
+            switch (cid) {
+            case IDB_TAB_BACKUP:   switch_tab(std::make_unique<TabBackup  >()); break;
+            case IDB_TAB_PROGRESS: switch_tab(std::make_unique<TabProgress>()); break;
+            case IDB_TAB_LOG:      switch_tab(std::make_unique<TabLog     >()); break;
+            }
+            break;
+        }
+        return 0;
     }
 
     return DefWindowProc(hwnd, message, wparam, lparam);
@@ -95,7 +112,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_CLIENTAPP));
     //wc.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = GetSysColorBrush(COLOR_3DFACE);
+    wc.hbrBackground = CreateSolidBrush(RGB(248, 248, 248)); // color is taken from [https://www.pcmag.com/reviews/spideroak-one] //GetSysColorBrush(COLOR_3DFACE);
     wc.lpszClassName = L"Guard of Data window class";
 
     main_wnd = FindWindow(wc.lpszClassName, NULL);
@@ -109,6 +126,16 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     RECT wnd_rect = {100, 100, 800+100, 600+100};
     main_wnd = CreateWindowEx(0, wc.lpszClassName, L"Guard of Data", WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN, RECTARGS(wnd_rect), NULL, NULL, hInstance, 0);
     if (!main_wnd) ERROR;
+
+    LOGFONT lf = {mul_by_system_scaling_factor(16), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH|FF_SWISS, _T("")};
+    button_font = CreateFontIndirect(&lf);
+    lf.lfWeight = FW_BOLD;
+    button_font_bold = CreateFontIndirect(&lf);
+
+    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_BACKUP,   L"Backup",    10, 10, 101, 40));
+    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_PROGRESS, L"Progress", 110, 10, 101, 40));
+    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_LOG,      L"Log",      210, 10, 101, 40));
+    SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0);
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
@@ -125,6 +152,9 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
             DispatchMessage(&msg);
         }
     }
+
+    tab_buttons.clear(); // may be unnecessary
+    current_tab.reset(); // may be unnecessary
 
     return msg.wParam;
 }
