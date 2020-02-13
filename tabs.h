@@ -17,7 +17,7 @@ class TabBackup : public Tab
 public:
     TabBackup() :
         filter(IDB_FILTER, L"Filter", 10, 60, 100, 30),
-        cancel_scan(IDB_CANCEL_SCAN, L"Cancel scan. I want to configure all guarded folders manually", 120, 60, 450, 30)
+        cancel_scan(IDB_CANCEL_SCAN, L"Cancel scan. I want to configure all guarded folders manually", 120, 60, 400, 30)
     {}
 };
 

@@ -34,8 +34,7 @@ LRESULT CALLBACK Button::button_subclass_proc(HWND hwnd, UINT msg, WPARAM wparam
         if (!btn->hover)
         {
             btn->hover = true;
-            static TRACKMOUSEEVENT tme = {sizeof(tme), TME_HOVER|TME_LEAVE, NULL, 100000};
-            tme.hwndTrack = hwnd;
+            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hwnd};
             TrackMouseEvent(&tme);
             InvalidateRect(hwnd, NULL, TRUE);
         }
