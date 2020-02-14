@@ -74,6 +74,7 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 HMENU sub_menu = GetSubMenu(menu, 0);
                 POINT curpos;
                 GetCursorPos(&curpos);
+                SetForegroundWindow(hwnd); // without this line of code menu will not disappear when the user clicks outside of the menu ([https://stackoverflow.com/questions/15494591/hide-close-menu-when-mouse-is-clicked-outside-its-focus <- google:‘TrackPopupMenu click does not close it site:stackoverflow.com’]:‘To display a context menu for a notification icon, the current window must be the foreground window before the application calls TrackPopupMenu’)
                 switch (TrackPopupMenu(sub_menu, TPM_LEFTALIGN|TPM_BOTTOMALIGN|TPM_RIGHTBUTTON|TPM_NONOTIFY|TPM_RETURNCMD, curpos.x, curpos.y, 0, hwnd, NULL))
                 {
                 case IDM_SHOWMAINWINDOW:
