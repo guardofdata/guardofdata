@@ -108,6 +108,44 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         }
         return 0;
 
+    case WM_SIZING:
+        {
+        const int MIN_WIDTH  = mul_by_system_scaling_factor(550),
+                  MIN_HEIGHT = mul_by_system_scaling_factor(300);
+        LPRECT lrect = (LPRECT)lparam;
+
+        if (lrect->right - lrect->left < MIN_WIDTH)
+            switch (wparam)
+            {
+            case WMSZ_RIGHT:
+            case WMSZ_TOPRIGHT:
+            case WMSZ_BOTTOMRIGHT:
+                lrect->right = lrect->left + MIN_WIDTH;
+                break;
+            case WMSZ_LEFT:
+            case WMSZ_TOPLEFT:
+            case WMSZ_BOTTOMLEFT:
+                lrect->left = lrect->right - MIN_WIDTH;
+                break;
+            }
+
+        if (lrect->bottom - lrect->top < MIN_HEIGHT)
+            switch (wparam)
+            {
+            case WMSZ_BOTTOM:
+            case WMSZ_BOTTOMLEFT:
+            case WMSZ_BOTTOMRIGHT:
+                lrect->bottom = lrect->top + MIN_HEIGHT;
+                break;
+            case WMSZ_TOP:
+            case WMSZ_TOPLEFT:
+            case WMSZ_TOPRIGHT:
+                lrect->top = lrect->bottom - MIN_HEIGHT;
+                break;
+            }
+        }
+        return TRUE;
+
     case WM_SIZE:
         {
         RECT treeview_wnd_rect = calc_treeview_wnd_rect();
