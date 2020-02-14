@@ -6,9 +6,22 @@ const UINT WM_TRAY = WM_USER;
 #define RECTARGS(rect) (rect).left, (rect).top, (rect).right-(rect).left, (rect).bottom-(rect).top
 
 HINSTANCE h_instance;
-HWND main_wnd;
+HWND main_wnd, treeview_wnd;
 std::vector<std::unique_ptr<Button>> tab_buttons;
 std::unique_ptr<Tab> current_tab;
+
+RECT calc_treeview_wnd_rect()
+{
+    RECT cr;
+    GetClientRect(main_wnd, &cr);
+    RECT r = {
+        mul_by_system_scaling_factor(10),
+        mul_by_system_scaling_factor(10 + TAB_BUTTON_HEIGHT + 10 + current_tab->treeview_offsety()),
+        cr.right  - mul_by_system_scaling_factor(10),
+        cr.bottom - mul_by_system_scaling_factor(10),
+    };
+    return r;
+}
 
 LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
@@ -90,8 +103,39 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
             case IDB_TAB_PROGRESS: switch_tab(std::make_unique<TabProgress>()); break;
             case IDB_TAB_LOG:      switch_tab(std::make_unique<TabLog     >()); break;
             }
+            PostMessage(hwnd, WM_SIZE, 0, 0);
             break;
         }
+        return 0;
+
+    case WM_SIZE:
+        {
+        RECT treeview_wnd_rect = calc_treeview_wnd_rect();
+        MoveWindow(treeview_wnd, RECTARGS(treeview_wnd_rect), TRUE);
+        InvalidateRect(treeview_wnd, NULL, TRUE);
+        }
+        break;
+    }
+
+    return DefWindowProc(hwnd, message, wparam, lparam);
+}
+
+LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    switch (message)
+    {
+    case WM_PAINT:
+        PAINTSTRUCT ps;
+        RECT r;
+        GetClientRect(hwnd, &r);
+        {
+        DoubleBufferedDC hdc(BeginPaint(hwnd, &ps), r.right, r.bottom);
+
+        {SelectPenAndBrush spb(hdc, RGB(223, 223, 223), RGB(255, 255, 255));
+        Rectangle(hdc, 0, 0, r.right, r.bottom);}
+
+        }
+        EndPaint(hwnd, &ps);
         return 0;
     }
 
@@ -106,6 +150,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     h_instance = hInstance;
 
     // Register the main window class
+    {
     WNDCLASS wc = {0};
     wc.lpfnWndProc = main_wnd_proc;
     wc.hInstance = hInstance;
@@ -126,16 +171,29 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     RECT wnd_rect = {100, 100, 800+100, 600+100};
     main_wnd = CreateWindowEx(0, wc.lpszClassName, L"Guard of Data", WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN, RECTARGS(wnd_rect), NULL, NULL, hInstance, 0);
     if (!main_wnd) ERROR;
+    }
 
     LOGFONT lf = {mul_by_system_scaling_factor(16), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH|FF_SWISS, _T("")};
     button_font = CreateFontIndirect(&lf);
     lf.lfWeight = FW_BOLD;
     button_font_bold = CreateFontIndirect(&lf);
 
-    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_BACKUP,   L"Backup",    10, 10, 101, 40));
-    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_PROGRESS, L"Progress", 110, 10, 101, 40));
-    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_LOG,      L"Log",      210, 10, 101, 40));
+    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_BACKUP,   L"Backup",   10,                      10, TAB_BUTTON_WIDTH + 1, TAB_BUTTON_HEIGHT));
+    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_PROGRESS, L"Progress", 10 +   TAB_BUTTON_WIDTH, 10, TAB_BUTTON_WIDTH + 1, TAB_BUTTON_HEIGHT));
+    tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_LOG,      L"Log",      10 + 2*TAB_BUTTON_WIDTH, 10, TAB_BUTTON_WIDTH + 1, TAB_BUTTON_HEIGHT));
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0);
+
+    {// Tree View child window is common between all tabs to avoid flickering during tab switching (when one Tree View is destroyed and another is created)
+    WNDCLASS wc = {0};
+    wc.lpfnWndProc = treeview_wnd_proc;
+    wc.hInstance = hInstance;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.lpszClassName = L"Guard of Data tree view window class";
+    if (!RegisterClass(&wc)) ERROR;
+    RECT treeview_wnd_rect = calc_treeview_wnd_rect();
+    treeview_wnd = CreateWindowEx(0, wc.lpszClassName, L"", WS_CHILD|WS_VISIBLE, RECTARGS(treeview_wnd_rect), main_wnd, NULL, hInstance, 0);
+    if (!treeview_wnd) ERROR;
+    }
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
