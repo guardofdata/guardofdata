@@ -46,7 +46,7 @@ LRESULT CALLBACK Button::button_subclass_proc(HWND hwnd, UINT msg, WPARAM wparam
 
 void Button::paint(HDC target_dc, bool pressed)
 {
-    State state = disabled ? State::DISABLED : selected ? State::SELECTED : pressed ? State::PRESSED : hover ? State::MOUSEOVER : State::NORMAL;
+    State state = disabled ? State::DISABLED : selected ? State::SELECTED : pressed ? State::PRESSED : (hover && GetAsyncKeyState(VK_LBUTTON) >= 0) ? State::MOUSEOVER : State::NORMAL;
     COLORREF text_color, bg_color;
     switch (state)
     {
@@ -74,6 +74,12 @@ void Button::paint(HDC target_dc, bool pressed)
     {SelectPenAndBrush spb(hdc, RGB(223, 223, 223), bg_color); // color 223 is taken from [https://www.pcmag.com/reviews/spideroak-one]
     Rectangle(hdc, 0, 0, width, height);}
 
+    if (state == State::PRESSED) {
+        r.left   += mul_by_system_scaling_factor(1);
+        r.right  += mul_by_system_scaling_factor(1);
+        r.top    += mul_by_system_scaling_factor(1);
+        r.bottom += mul_by_system_scaling_factor(1);
+    }
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, text_color);
     SelectFont(hdc, id <= IDB_TAB_LOG ? button_font_bold : button_font);

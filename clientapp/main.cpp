@@ -91,6 +91,14 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         }
         return 0;
 
+    case WM_DRAWITEM:
+        {
+        DRAWITEMSTRUCT *pdis = (DRAWITEMSTRUCT*)lparam;
+        //((Button*)GetWindowLongPtr(pdis->hwndItem, GWL_USERDATA))->dis_selected = (pdis->itemState & ODS_SELECTED) != 0;
+        InvalidateRect(pdis->hwndItem, NULL, TRUE); // needed for correct visual switching to/from PRESSED state
+        return TRUE;
+        }
+
     case WM_COMMAND:
         switch (WORD cid = LOWORD(wparam))
         {
