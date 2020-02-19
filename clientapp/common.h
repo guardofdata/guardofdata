@@ -12,7 +12,7 @@
 #define ASSERT assert
 
 extern HINSTANCE h_instance;
-extern HWND main_wnd;
+extern HWND main_wnd, treeview_wnd;
 
 // [https://blog.softwareverify.com/how-to-make-your-mfc-or-non-mfc-program-support-high-dpi-monitors-the-easy-way/ <- https://www.codeproject.com/Messages/5452471/Re-create-a-dpi-aware-application.aspx <- google:‘codeproject dpiaware windows 7 site:www.codeproject.com’]
 inline int mul_by_system_scaling_factor(int i)

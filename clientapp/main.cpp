@@ -187,6 +187,7 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
         EndPaint(hwnd, &ps);
         return 0;
 
+    case WM_MOUSEMOVE:
     case WM_TIMER:
         InvalidateRect(hwnd, NULL, FALSE);
         break;
