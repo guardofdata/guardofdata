@@ -14,7 +14,7 @@ std::unordered_set<std::wstring> always_excluded_directories = {
     L"Users",
     L"Windows",
 };
-// By default ‘<UserProfile>\AppData\Local’ and ‘<UserProfile>\AppData\LocalLow’ are excluded
+// By default ‘<UserProfile>\AppData\Local’ and ‘<UserProfile>\AppData\LocalLow’ are excluded (also .git directories which size is more than 100MB are excluded)
 // C/<UserProfile> <- %USERPROFILE% or [UserProfiles]/<UserName>
 //   ^           ^
 //   └───────────┴─────────────────────────────────── — because `<` and `>` are not allowed in the file name
@@ -50,7 +50,10 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de)
         }
 
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_REPARSE_POINT)) // skip hidden files and directories and symbolic links
-            continue;
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && wcscmp(fd.cFileName, L".git") == 0)
+                ASSERT((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
+            else
+                continue;
 
         std::wstring file_name(fd.cFileName);
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {

@@ -44,9 +44,9 @@ public:
 
     ~DoubleBufferedDC()
     {
-        BitBlt(target_dc, 0, 0, width, height, hdc, 0, 0, SRCCOPY);//"swap buffers"
-        SelectObject(hdc, holdbmp);
-        DeleteObject(hmembmp);
+        BitBlt(target_dc, 0, 0, width, height, hdc, 0, 0, SRCCOPY);
+        SelectBitmap(hdc, holdbmp);
+        DeleteBitmap(hmembmp);
         DeleteDC(hdc);
     }
 
