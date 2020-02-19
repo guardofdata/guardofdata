@@ -254,7 +254,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         ShowWindow(main_wnd, SW_NORMAL);
 
     DWORD WINAPI initial_scan(LPVOID);
-    CreateThread(NULL, 0, initial_scan, NULL, 0, NULL);
+    HANDLE initial_scan_thread = CreateThread(NULL, 0, initial_scan, NULL, 0, NULL);
 
     SetTimer(treeview_wnd, 1, 200, NULL);
 
@@ -271,6 +271,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         }
     }
 
+    TabBackup::stop_scan = true;
+    WaitForSingleObject(initial_scan_thread, INFINITE);
     tab_buttons.clear(); // may be unnecessary
     current_tab.reset(); // may be unnecessary
 

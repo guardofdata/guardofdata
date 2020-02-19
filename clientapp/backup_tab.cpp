@@ -5,6 +5,8 @@ const int DIR_SIZE_COLUMN_WIDTH = mul_by_system_scaling_factor(70);
 const int FILES_COUNT_COLUMN_WIDTH = mul_by_system_scaling_factor(50);
 const int LINE_HEIGHT = FONT_HEIGHT + 2;
 
+volatile bool TabBackup::stop_scan = false;
+
 std::unordered_set<std::wstring> always_excluded_directories = {
     L"$Recycle.Bin",
     L"Program Files",
@@ -42,6 +44,11 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de)
 
     do
     {
+        if (TabBackup::stop_scan) {
+            FindClose(h);
+            return;
+        }
+
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_REPARSE_POINT)) // skip hidden files and directories and symbolic links
             continue;
 
@@ -70,8 +77,11 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de)
         pde->num_of_files += de.num_of_files;
     }
 
-    for (auto &&sd : de.subdirs)
+    for (auto &&sd : de.subdirs) {
+        if (TabBackup::stop_scan)
+            return;
         enum_files_recursively(dir_name / sd.first, sd.second);
+    }
 }
 
 DWORD WINAPI initial_scan(LPVOID)

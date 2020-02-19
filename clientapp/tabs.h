@@ -25,6 +25,8 @@ class TabBackup : public Tab
     Button filter, cancel_scan;//, start_backup;
 
 public:
+    static volatile bool stop_scan;
+
     TabBackup() :
         filter(IDB_FILTER, L"Filter", 10, 60, 100, 30),
         cancel_scan(IDB_CANCEL_SCAN, L"Cancel scan. I want to configure all guarded folders manually", 120, 60, 400, 30)
