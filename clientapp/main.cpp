@@ -49,7 +49,8 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
             NOTIFYICONDATA stData = {0};
             stData.cbSize = sizeof(stData);
             stData.hWnd = hwnd;
-            Shell_NotifyIcon(NIM_DELETE, &stData);
+            if (!Shell_NotifyIcon(NIM_DELETE, &stData))
+                ERROR;
         }
         PostQuitMessage(0);
         return 0;
@@ -181,9 +182,14 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
         {SelectPenAndBrush spb(hdc, RGB(223, 223, 223), RGB(255, 255, 255));
         Rectangle(hdc, 0, 0, r.right, r.bottom);}
 
+        current_tab->treeview_paint(hdc, r.right, r.bottom);
         }
         EndPaint(hwnd, &ps);
         return 0;
+
+    case WM_TIMER:
+        InvalidateRect(hwnd, NULL, FALSE);
+        break;
     }
 
     return DefWindowProc(hwnd, message, wparam, lparam);
@@ -220,8 +226,9 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     if (!main_wnd) ERROR;
     }
 
-    LOGFONT lf = {mul_by_system_scaling_factor(16), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH|FF_SWISS, _T("")};
+    LOGFONT lf = {FONT_HEIGHT, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH|FF_SWISS, _T("")};
     button_font = CreateFontIndirect(&lf);
+    treeview_font = button_font;
     lf.lfWeight = FW_BOLD;
     button_font_bold = CreateFontIndirect(&lf);
 
@@ -244,6 +251,11 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
+
+    DWORD WINAPI initial_scan(LPVOID);
+    CreateThread(NULL, 0, initial_scan, NULL, 0, NULL);
+
+    SetTimer(treeview_wnd, 1, 200, NULL);
 
     MSG msg;
     BOOL ret;

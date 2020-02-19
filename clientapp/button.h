@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-extern HFONT button_font, button_font_bold;
+extern HFONT button_font, button_font_bold, treeview_font;
 
 class Button
 {

@@ -3,7 +3,7 @@
 #include "button.h"
 
 
-HFONT button_font, button_font_bold;
+HFONT button_font, button_font_bold, treeview_font;
 WNDPROC Button::btn_old_wnd_proc = NULL;
 
 LRESULT CALLBACK Button::button_subclass_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)

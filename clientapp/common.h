@@ -5,10 +5,10 @@
 #include <windowsx.h>
 
 
-#undef ERROR
-#define ERROR do {} while(false)
-
 #include <assert.h>
+#undef ERROR
+#define ERROR assert(false)
+
 #define ASSERT assert
 
 extern HINSTANCE h_instance;
@@ -25,6 +25,7 @@ inline int mul_by_system_scaling_factor(int i)
     }
     return i * logpixelsx / 96;
 }
+const int FONT_HEIGHT = mul_by_system_scaling_factor(16);
 
 // [http://web.archive.org/web/20100612190451/http://catch22.net/tuts/flicker <- http://web.archive.org/web/20100107165555/http://blogs.msdn.com/larryosterman/archive/2009/09/16/building-a-flicker-free-volume-control.aspx <- https://stackoverflow.com/questions/1842377/double-buffer-common-controls <- google:‘site:stackoverflow.com winapi tab switch flickering’]
 class DoubleBufferedDC
@@ -81,4 +82,19 @@ public:
         SelectBrush(hdc, prev_brush);
         DeleteBrush(brush);
     }
+};
+
+inline std::wstring operator/(const std::wstring &d, const std::wstring &f) {return d.back() == L'/' ? d + f : d + L'/' + f;}
+inline std::wstring operator/(const std::wstring &d, const wchar_t      *f) {return d.back() == L'/' ? d + f : d + L'/' + f;}
+
+extern "C" long _InterlockedExchange(long volatile *, long);
+inline void spin_lock_acquire(volatile long &lock) {if (_InterlockedExchange(&lock, 1)) while (lock || _InterlockedExchange(&lock, 1)) _mm_pause();}
+inline void spin_lock_release(volatile long &lock) {_InterlockedExchange(&lock, 0);}
+
+class SpinLock
+{
+    long lock = 0;
+public:
+    void acquire() {spin_lock_acquire(lock);}
+    void release() {spin_lock_release(lock);}
 };

@@ -91,6 +91,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="backup_tab.cpp" />
     <ClCompile Include="button.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="precompiled.cpp">
