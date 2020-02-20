@@ -12,7 +12,7 @@
 #define ASSERT assert
 
 extern HINSTANCE h_instance;
-extern HWND main_wnd, treeview_wnd;
+extern HWND main_wnd, treeview_wnd, scrollbar_wnd;
 
 // [https://blog.softwareverify.com/how-to-make-your-mfc-or-non-mfc-program-support-high-dpi-monitors-the-easy-way/ <- https://www.codeproject.com/Messages/5452471/Re-create-a-dpi-aware-application.aspx <- google:‘codeproject dpiaware windows 7 site:www.codeproject.com’]
 inline int mul_by_system_scaling_factor(int i)
@@ -26,6 +26,7 @@ inline int mul_by_system_scaling_factor(int i)
     return i * logpixelsx / 96;
 }
 const int FONT_HEIGHT = mul_by_system_scaling_factor(16);
+const int LINE_HEIGHT = FONT_HEIGHT + 2;
 
 // [http://web.archive.org/web/20100612190451/http://catch22.net/tuts/flicker <- http://web.archive.org/web/20100107165555/http://blogs.msdn.com/larryosterman/archive/2009/09/16/building-a-flicker-free-volume-control.aspx <- https://stackoverflow.com/questions/1842377/double-buffer-common-controls <- google:‘site:stackoverflow.com winapi tab switch flickering’]
 class DoubleBufferedDC

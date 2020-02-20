@@ -5,6 +5,9 @@ const int TAB_BUTTON_WIDTH  = 100;
 const int TAB_BUTTON_HEIGHT = 40;
 
 const int TREEVIEW_PADDING = mul_by_system_scaling_factor(5);
+const int LINE_PADDING_TOP = mul_by_system_scaling_factor(1);
+const int LINE_PADDING_LEFT  = mul_by_system_scaling_factor(2);
+const int LINE_PADDING_RIGHT = mul_by_system_scaling_factor(2);
 
 class Tab
 {

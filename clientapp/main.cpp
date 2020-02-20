@@ -6,20 +6,32 @@ const UINT WM_TRAY = WM_USER;
 #define RECTARGS(rect) (rect).left, (rect).top, (rect).right-(rect).left, (rect).bottom-(rect).top
 
 HINSTANCE h_instance;
-HWND main_wnd, treeview_wnd;
+HWND main_wnd, treeview_wnd, scrollbar_wnd;
+int scrollbar_width;
 std::vector<std::unique_ptr<Button>> tab_buttons;
 std::unique_ptr<Tab> current_tab;
 
-RECT calc_treeview_wnd_rect()
+struct TV_SB_WndRects
+{
+    RECT treeview_wnd_rect, scrollbar_wnd_rect;
+};
+TV_SB_WndRects calc_treeview_and_scrollbar_wnd_rects()
 {
     RECT cr;
     GetClientRect(main_wnd, &cr);
-    RECT r = {
+    RECT tr = {
         mul_by_system_scaling_factor(10),
         mul_by_system_scaling_factor(10 + TAB_BUTTON_HEIGHT + 10 + current_tab->treeview_offsety()),
-        cr.right  - mul_by_system_scaling_factor(10),
+        cr.right  - mul_by_system_scaling_factor(10) - scrollbar_width,
         cr.bottom - mul_by_system_scaling_factor(10),
     };
+    RECT sr = {
+        tr.right,
+        tr.top,
+        tr.right + scrollbar_width,
+        tr.bottom
+    };
+    TV_SB_WndRects r = {tr, sr};
     return r;
 }
 
@@ -158,10 +170,54 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
 
     case WM_SIZE:
         {
-        RECT treeview_wnd_rect = calc_treeview_wnd_rect();
-        MoveWindow(treeview_wnd, RECTARGS(treeview_wnd_rect), TRUE);
+        auto wr = calc_treeview_and_scrollbar_wnd_rects();
+        MoveWindow(treeview_wnd, RECTARGS(wr.treeview_wnd_rect), TRUE);
+        MoveWindow(scrollbar_wnd, RECTARGS(wr.scrollbar_wnd_rect), TRUE);
         InvalidateRect(treeview_wnd, NULL, TRUE);
+        SCROLLINFO si = {sizeof(si)};
+        si.fMask = SIF_PAGE;
+        si.nPage = wr.treeview_wnd_rect.bottom - wr.treeview_wnd_rect.top;
+        SetScrollInfo(scrollbar_wnd, SB_CTL, &si, TRUE);
         }
+        break;
+
+    case WM_VSCROLL:
+        switch (LOWORD(wparam))
+        {
+        case SB_THUMBTRACK:
+        case SB_THUMBPOSITION: {
+            SCROLLINFO si = {sizeof(si), SIF_TRACKPOS};
+            GetScrollInfo(scrollbar_wnd, SB_CTL, &si);
+            ScrollBar_SetPos(scrollbar_wnd, si.nTrackPos, TRUE);
+            break; }
+        case SB_LINEDOWN:
+            ScrollBar_SetPos(scrollbar_wnd, ScrollBar_GetPos(scrollbar_wnd) + LINE_HEIGHT, TRUE);
+            break;
+        case SB_LINEUP:
+            ScrollBar_SetPos(scrollbar_wnd, ScrollBar_GetPos(scrollbar_wnd) - LINE_HEIGHT, TRUE);
+            break;
+        case SB_PAGEDOWN:
+        case SB_PAGEUP:
+            SCROLLINFO si = {sizeof(si), SIF_PAGE};
+            GetScrollInfo(scrollbar_wnd, SB_CTL, &si);
+            switch (LOWORD(wparam))
+            {
+            case SB_PAGEDOWN:
+                ScrollBar_SetPos(scrollbar_wnd, ScrollBar_GetPos(scrollbar_wnd) + si.nPage/2, TRUE);
+                break;
+            case SB_PAGEUP:
+                ScrollBar_SetPos(scrollbar_wnd, ScrollBar_GetPos(scrollbar_wnd) - si.nPage/2, TRUE);
+                break;
+            }
+            break;
+        }
+
+        InvalidateRect(treeview_wnd, NULL, TRUE);
+        return 0;
+
+    case WM_MOUSEWHEEL:
+        for (int i=0; i<3; i++)
+            SendMessage(main_wnd, WM_VSCROLL, MAKEWPARAM(GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0),0);
         break;
     }
 
@@ -238,6 +294,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     tab_buttons.push_back(std::make_unique<Button>(IDB_TAB_LOG,      L"Log",      10 + 2*TAB_BUTTON_WIDTH, 10, TAB_BUTTON_WIDTH + 1, TAB_BUTTON_HEIGHT));
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0);
 
+    auto wr = calc_treeview_and_scrollbar_wnd_rects();
     {// Tree View child window is common between all tabs to avoid flickering during tab switching (when one Tree View is destroyed and another is created)
     WNDCLASS wc = {0};
     wc.lpfnWndProc = treeview_wnd_proc;
@@ -245,10 +302,14 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.lpszClassName = L"Guard of Data tree view window class";
     if (!RegisterClass(&wc)) ERROR;
-    RECT treeview_wnd_rect = calc_treeview_wnd_rect();
-    treeview_wnd = CreateWindowEx(0, wc.lpszClassName, L"", WS_CHILD|WS_VISIBLE, RECTARGS(treeview_wnd_rect), main_wnd, NULL, hInstance, 0);
+    treeview_wnd = CreateWindowEx(0, wc.lpszClassName, L"", WS_CHILD|WS_VISIBLE, RECTARGS(wr.treeview_wnd_rect), main_wnd, NULL, hInstance, 0);
     if (!treeview_wnd) ERROR;
     }
+
+    scrollbar_wnd = CreateWindowEx(0, L"SCROLLBAR", L"", WS_VISIBLE|SBS_VERT|SBS_SIZEBOXBOTTOMRIGHTALIGN|WS_CHILD, RECTARGS(wr.scrollbar_wnd_rect), main_wnd, NULL, hInstance, 0);
+    if (!scrollbar_wnd) ERROR;
+    GetClientRect(scrollbar_wnd, &wr.scrollbar_wnd_rect);
+    scrollbar_width = wr.scrollbar_wnd_rect.right - wr.scrollbar_wnd_rect.left;
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
