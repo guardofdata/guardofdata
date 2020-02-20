@@ -130,8 +130,7 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         }
         return 0;
 
-    case WM_SIZING:
-        {
+    case WM_SIZING: {
         const int MIN_WIDTH  = mul_by_system_scaling_factor(550),
                   MIN_HEIGHT = mul_by_system_scaling_factor(300);
         LPRECT lrect = (LPRECT)lparam;
@@ -165,11 +164,9 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 lrect->top = lrect->bottom - MIN_HEIGHT;
                 break;
             }
-        }
-        return TRUE;
+        return TRUE; }
 
-    case WM_SIZE:
-        {
+    case WM_SIZE: {
         auto wr = calc_treeview_and_scrollbar_wnd_rects();
         MoveWindow(treeview_wnd, RECTARGS(wr.treeview_wnd_rect), TRUE);
         MoveWindow(scrollbar_wnd, RECTARGS(wr.scrollbar_wnd_rect), TRUE);
@@ -177,9 +174,16 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         SCROLLINFO si = {sizeof(si)};
         si.fMask = SIF_PAGE;
         si.nPage = wr.treeview_wnd_rect.bottom - wr.treeview_wnd_rect.top;
-        SetScrollInfo(scrollbar_wnd, SB_CTL, &si, TRUE);
+        int smin, smax;
+        ScrollBar_GetRange(scrollbar_wnd, &smin, &smax);
+        if (smax < (int)si.nPage)
+            EnableWindow(scrollbar_wnd, FALSE);
+        else {
+            SetScrollInfo(scrollbar_wnd, SB_CTL, &si, TRUE);
+            EnableWindow(scrollbar_wnd, TRUE);
+            InvalidateRect(scrollbar_wnd, NULL, TRUE);
         }
-        break;
+        break; }
 
     case WM_VSCROLL:
         switch (LOWORD(wparam))
