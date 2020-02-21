@@ -25,7 +25,7 @@ extern std::unique_ptr<Tab> current_tab;
 
 class TabBackup : public Tab
 {
-    Button filter, cancel_scan;//, start_backup;
+    Button filter, cancel_scan;//, restart_scan, start_backup;
 
 public:
     static volatile bool stop_scan;

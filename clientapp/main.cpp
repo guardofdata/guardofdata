@@ -220,8 +220,9 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         return 0;
 
     case WM_MOUSEWHEEL:
-        for (int i=0; i<3; i++)
-            SendMessage(main_wnd, WM_VSCROLL, MAKEWPARAM(GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0),0);
+        if (IsWindowEnabled(scrollbar_wnd))
+            for (int i=0; i<3; i++)
+                SendMessage(main_wnd, WM_VSCROLL, MAKEWPARAM(GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0),0);
         break;
     }
 
