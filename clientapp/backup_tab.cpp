@@ -119,6 +119,8 @@ void fill_dirs(std::vector<DirItem> &all_dirs, DirEntry &d, int level = 0)
     }
 }
 
+POINT pressed_cur_pos;
+bool operator==(const POINT &p1, const POINT &p2) {return memcmp(&p1, &p2, sizeof(POINT)) == 0;}
 DirItem treeview_hover_dir_item = {0};
 
 void TabBackup::treeview_paint(HDC hdc, int width, int height)
@@ -146,7 +148,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
      && cur_pos.y >= wnd_rect.top
      && cur_pos.x < wnd_rect.right
      && cur_pos.y < wnd_rect.bottom
-     && GetAsyncKeyState(VK_LBUTTON) >= 0) { // do not show hover rect when left mouse button is pressed (during scrolling or pressing some button)
+     && (GetAsyncKeyState(VK_LBUTTON) >= 0 || cur_pos == pressed_cur_pos)) { // do not show hover rect when left mouse button is pressed (during scrolling or pressing some button)
         int item_under_mouse = (cur_pos.y - wnd_rect.top - TREEVIEW_PADDING + scrollpos) / LINE_HEIGHT;
         if (item_under_mouse < (int)dirs.size()) {
             treeview_hover_dir_item = dirs[item_under_mouse];
@@ -201,6 +203,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
 
 void TabBackup::treeview_lbdown()
 {
+    GetCursorPos(&pressed_cur_pos);
     if (treeview_hover_dir_item.d == nullptr)
         return;
 
