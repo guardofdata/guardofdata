@@ -191,7 +191,8 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
 
             r.right = r.left;
             r.left = TREEVIEW_PADDING + d.level * TREEVIEW_LEVEL_OFFSET;
-            DrawIconEx(hdc, r.left, r.top, d.d->expanded ? icon_dir_exp : icon_dir_col, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+            if (!d.d->subdirs.empty())
+                DrawIconEx(hdc, r.left, r.top, d.d->expanded ? icon_dir_exp : icon_dir_col, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
             r.left += ICON_SIZE + LINE_PADDING_LEFT;
             DrawText(hdc, d.name->c_str(), -1, &r, DT_END_ELLIPSIS);
