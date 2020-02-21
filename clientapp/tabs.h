@@ -16,6 +16,7 @@ public:
 
     virtual int treeview_offsety() const {return 0;}
     virtual void treeview_paint(HDC hdc, int width, int height) = 0;
+    virtual void treeview_lbdown() = 0;
 };
 
 extern std::unique_ptr<Tab> current_tab;
@@ -37,16 +38,19 @@ public:
 
     virtual int treeview_offsety() const override {return 40;}
     virtual void treeview_paint(HDC hdc, int width, int height) override;
+    virtual void treeview_lbdown() override;
 };
 
 class TabProgress : public Tab
 {
     virtual void treeview_paint(HDC hdc, int width, int height) override {}
+    virtual void treeview_lbdown() override {}
 };
 
 class TabLog : public Tab
 {
     virtual void treeview_paint(HDC hdc, int width, int height) override {}
+    virtual void treeview_lbdown() override {}
 };
 
 inline void switch_tab(std::unique_ptr<Tab> &&t)

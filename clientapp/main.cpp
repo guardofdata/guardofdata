@@ -8,6 +8,7 @@ const UINT WM_TRAY = WM_USER;
 HINSTANCE h_instance;
 HWND main_wnd, treeview_wnd, scrollbar_wnd;
 int scrollbar_width;
+HICON icon_dir_col, icon_dir_exp;
 std::vector<std::unique_ptr<Button>> tab_buttons;
 std::unique_ptr<Tab> current_tab;
 
@@ -240,10 +241,16 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
         {
         DoubleBufferedDC hdc(BeginPaint(hwnd, &ps), r.right, r.bottom);
 
-        {SelectPenAndBrush spb(hdc, RGB(223, 223, 223), RGB(255, 255, 255));
-        Rectangle(hdc, 0, 0, r.right, r.bottom);}
+        //{SelectPenAndBrush spb(hdc, RGB(223, 223, 223), RGB(255, 255, 255)); // commented out as there were artifacts (white background from dir_collapsed.ico) at the bottom of tree view after scrolling to end and scrollbar up button pressed
+        //Rectangle(hdc, 0, 0, r.right, r.bottom);}
+        FillRect(hdc, &r, GetStockBrush(WHITE_BRUSH));
 
         current_tab->treeview_paint(hdc, r.right, r.bottom);
+
+        static HPEN pen = CreatePen(PS_SOLID, 1, RGB(223, 223, 223));
+        SelectPen(hdc, pen);
+        SelectBrush(hdc, GetStockBrush(HOLLOW_BRUSH));
+        Rectangle(hdc, 0, 0, r.right, r.bottom);
         }
         EndPaint(hwnd, &ps);
         return 0;
@@ -251,6 +258,10 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
     case WM_MOUSEMOVE:
     case WM_TIMER:
         InvalidateRect(hwnd, NULL, FALSE);
+        break;
+
+    case WM_LBUTTONDOWN:
+        current_tab->treeview_lbdown();
         break;
     }
 
@@ -315,6 +326,9 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     if (!scrollbar_wnd) ERROR;
     GetClientRect(scrollbar_wnd, &wr.scrollbar_wnd_rect);
     scrollbar_width = wr.scrollbar_wnd_rect.right - wr.scrollbar_wnd_rect.left;
+
+    icon_dir_col = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_DIR_COLLAPSED), IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
+    icon_dir_exp = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_DIR_EXPANDED),  IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
