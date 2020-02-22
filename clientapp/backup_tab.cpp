@@ -106,6 +106,18 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             de.max_last_write_time = sd.second.max_last_write_time;
     }
 
+    std::function<void(DirEntry&)> set_inherit_from_parent = [&set_inherit_from_parent](DirEntry &de) {
+        for (auto &&sd : de.subdirs) {
+            sd.second.mode = DirMode::INHERIT_FROM_PARENT;
+            set_inherit_from_parent(sd.second);
+        }
+    };
+    if (ends_with(dir_name, L"/.git") && de.size > 100*1024*1024) {
+        de.mode = DirMode::EXCLUDED;
+        set_inherit_from_parent(de);
+        return;
+    }
+
     if (level > DIR_MODE_LEVELS_AUTO) {
         de.mode = DirMode::INHERIT_FROM_PARENT;
         return;
@@ -117,13 +129,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         fast_make_lowercase_en(&base_name[0]);
         if (base_name.find(L"photo") != base_name.npos) {
             de.mode = DirMode::APPEND_ONLY;
-            std::function<void(DirEntry&)> f = [&f](DirEntry &de) {
-                for (auto &&sd : de.subdirs) {
-                    sd.second.mode = DirMode::INHERIT_FROM_PARENT;
-                    f(sd.second);
-                }
-            };
-            f(de);
+            set_inherit_from_parent(de);
             return;
         }
     }

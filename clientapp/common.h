@@ -108,3 +108,9 @@ inline void fast_make_lowercase_en(wchar_t *s)
         if (unsigned(int(*s) - int(L'A')) <= unsigned(L'Z' - L'A'))
             *s += L'a' - L'A';
 }
+
+template <int N> inline bool ends_with(const std::wstring &s, const wchar_t (&suffix)[N])
+{
+    size_t suffix_len = N - 1;
+    return s.length() >= suffix_len && memcmp(s.c_str() + s.length() - suffix_len, suffix, suffix_len*sizeof(wchar_t)) == 0;
+}
