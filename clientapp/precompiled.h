@@ -25,3 +25,4 @@
 #include <memory>
 #include <unordered_set>
 #include <map>
+#include <functional>

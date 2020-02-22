@@ -101,3 +101,10 @@ public:
     void acquire() {spin_lock_acquire(lock);}
     void release() {spin_lock_release(lock);}
 };
+
+inline void fast_make_lowercase_en(wchar_t *s)
+{
+    for (; *s; s++)
+        if (unsigned(int(*s) - int(L'A')) <= unsigned(L'Z' - L'A'))
+            *s += L'a' - L'A';
+}

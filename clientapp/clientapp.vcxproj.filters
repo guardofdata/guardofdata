@@ -66,5 +66,17 @@
     <Image Include="icons\dir_expanded.ico">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="icons\minus_red.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="icons\dot_green.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="icons\snowflake.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="icons\plus_blue.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

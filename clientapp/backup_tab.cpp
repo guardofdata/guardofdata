@@ -4,6 +4,7 @@
 const int DIR_SIZE_COLUMN_WIDTH = mul_by_system_scaling_factor(70);
 const int FILES_COUNT_COLUMN_WIDTH = mul_by_system_scaling_factor(50);
 const int TREEVIEW_LEVEL_OFFSET = mul_by_system_scaling_factor(16);
+const int DIR_MODE_LEVELS_AUTO = 2;
 
 volatile bool TabBackup::stop_scan = false;
 
@@ -19,6 +20,16 @@ std::unordered_set<std::wstring> always_excluded_directories = {
 //   ^           ^
 //   └───────────┴─────────────────────────────────── — because `<` and `>` are not allowed in the file name
 
+enum class DirMode
+{
+    INHERIT_FROM_PARENT,
+    EXCLUDED,
+    NORMAL,
+    FROZEN,
+    APPEND_ONLY,
+};
+HICON mode_icons[4];
+
 class DirEntry
 {
 public:
@@ -27,13 +38,16 @@ public:
     SpinLock subdirs_lock;
     uint32_t num_of_files = 0;
     uint64_t size = 0;
+    FILETIME max_last_write_time = FILETIME{}; // zero initialization
+    DirMode mode = DirMode::INHERIT_FROM_PARENT;
     bool scan_started = false;
     bool expanded = false;
 };
 
 DirEntry root_dir_entry;
+FILETIME cur_ft;
 
-void enum_files_recursively(const std::wstring &dir_name, DirEntry &de)
+void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int level = 0)
 {
     de.scan_started = true;
 
@@ -67,6 +81,9 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de)
         else {
             de.size += (uint64_t(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
             de.num_of_files++;
+            if ((uint64_t&)fd.ftLastWriteTime > (uint64_t&)de.max_last_write_time // CompareFileTime() is much slower
+                    && (int64_t&)cur_ft - (int64_t&)fd.ftLastWriteTime >= 0) // ignore time in future
+                de.max_last_write_time = fd.ftLastWriteTime;
         }
     } while (FindNextFile(h, &fd));
 
@@ -84,12 +101,50 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de)
     for (auto &&sd : de.subdirs) {
         if (TabBackup::stop_scan)
             return;
-        enum_files_recursively(dir_name / sd.first, sd.second);
+        enum_files_recursively(dir_name / sd.first, sd.second, level + 1);
+        if ((uint64_t&)sd.second.max_last_write_time > (uint64_t&)de.max_last_write_time)
+            de.max_last_write_time = sd.second.max_last_write_time;
+    }
+
+    if (level > DIR_MODE_LEVELS_AUTO) {
+        de.mode = DirMode::INHERIT_FROM_PARENT;
+        return;
+    }
+
+    size_t last_slash_pos = dir_name.rfind(L'/');
+    if (last_slash_pos != dir_name.npos) {
+        std::wstring base_name(dir_name.c_str() + last_slash_pos + 1);
+        fast_make_lowercase_en(&base_name[0]);
+        if (base_name.find(L"photo") != base_name.npos) {
+            de.mode = DirMode::APPEND_ONLY;
+            std::function<void(DirEntry&)> f = [&f](DirEntry &de) {
+                for (auto &&sd : de.subdirs) {
+                    sd.second.mode = DirMode::INHERIT_FROM_PARENT;
+                    f(sd.second);
+                }
+            };
+            f(de);
+            return;
+        }
+    }
+
+    if ((uint64_t&)de.max_last_write_time == 0) {
+        de.mode = DirMode::INHERIT_FROM_PARENT;
+        return;
+    }
+
+    int64_t days_since_last_write = ((int64_t&)cur_ft - (int64_t&)de.max_last_write_time)/(10000000LL*3600*24);
+    if (days_since_last_write > 365/2) {
+        de.mode = DirMode::FROZEN;
+    }
+    else {
+        de.mode = DirMode::NORMAL;
     }
 }
 
 DWORD WINAPI initial_scan(LPVOID)
 {
+    GetSystemTimeAsFileTime(&cur_ft);
     enum_files_recursively(L"C:", root_dir_entry);
     return 0;
 }
@@ -179,6 +234,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
                 char s[32];
                 //sprintf_s(s, d.second->size >= 100*MB ? "%.0f" : d.second->size >= 10*MB ? "%.1f" : d.second->size >= MB ? "%.2f" : "%.3f", d.second->size / double(MB));
                 sprintf_s(s, "%.1f", d.d->size / double(MB));
+                //sprintf_s(s, "%.1f", ((int64_t&)cur_ft - (int64_t&)d.d->max_last_write_time)/(10000000.0*3600*24));
                 DrawTextA(hdc, s, -1, &r, DT_RIGHT);
 
                 r.right = r.left;
@@ -193,6 +249,17 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
             r.left = TREEVIEW_PADDING + d.level * TREEVIEW_LEVEL_OFFSET;
             if (!d.d->subdirs.empty())
                 DrawIconEx(hdc, r.left, r.top, d.d->expanded ? icon_dir_exp : icon_dir_col, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+
+            r.left += ICON_SIZE;
+            DirMode mode = d.d->mode;
+            if (mode == DirMode::INHERIT_FROM_PARENT)
+                for (DirEntry *pd = d.d->parent; pd; pd = pd->parent)
+                    if (pd->mode != DirMode::INHERIT_FROM_PARENT) {
+                        mode = pd->mode;
+                        break;
+                    }
+            if (mode != DirMode::INHERIT_FROM_PARENT)
+                DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode-1], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
             r.left += ICON_SIZE + LINE_PADDING_LEFT;
             DrawText(hdc, d.name->c_str(), -1, &r, DT_END_ELLIPSIS);

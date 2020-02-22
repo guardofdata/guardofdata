@@ -106,6 +106,10 @@
     <Image Include="clientapp.ico" />
     <Image Include="icons\dir_collapsed.ico" />
     <Image Include="icons\dir_expanded.ico" />
+    <Image Include="icons\dot_green.ico" />
+    <Image Include="icons\minus_red.ico" />
+    <Image Include="icons\plus_blue.ico" />
+    <Image Include="icons\snowflake.ico" />
     <Image Include="small.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
