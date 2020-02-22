@@ -28,7 +28,7 @@ enum class DirMode
     FROZEN,
     APPEND_ONLY,
 };
-HICON mode_icons[4];
+HICON mode_icons[4], mode_mixed_icon;
 
 class DirEntry
 {
@@ -40,6 +40,7 @@ public:
     uint64_t size = 0;
     FILETIME max_last_write_time = FILETIME{}; // zero initialization
     DirMode mode = DirMode::INHERIT_FROM_PARENT;
+    bool mode_mixed = false;
     bool scan_started = false;
     bool expanded = false;
 };
@@ -120,32 +121,40 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
 
     if (level > DIR_MODE_LEVELS_AUTO) {
         de.mode = DirMode::INHERIT_FROM_PARENT;
-        return;
+        //return; // no return to check if mode is mixed (e.g. if there is EXCLUDED .git subdirectory)
     }
+    else {
+        size_t last_slash_pos = dir_name.rfind(L'/');
+        if (last_slash_pos != dir_name.npos) {
+            std::wstring base_name(dir_name.c_str() + last_slash_pos + 1);
+            fast_make_lowercase_en(&base_name[0]);
+            if (base_name.find(L"photo") != base_name.npos) {
+                de.mode = DirMode::APPEND_ONLY;
+                set_inherit_from_parent(de);
+                return;
+            }
+        }
 
-    size_t last_slash_pos = dir_name.rfind(L'/');
-    if (last_slash_pos != dir_name.npos) {
-        std::wstring base_name(dir_name.c_str() + last_slash_pos + 1);
-        fast_make_lowercase_en(&base_name[0]);
-        if (base_name.find(L"photo") != base_name.npos) {
-            de.mode = DirMode::APPEND_ONLY;
-            set_inherit_from_parent(de);
+        if ((uint64_t&)de.max_last_write_time == 0) {
+            de.mode = DirMode::INHERIT_FROM_PARENT;
             return;
+        }
+
+        int64_t days_since_last_write = ((int64_t&)cur_ft - (int64_t&)de.max_last_write_time)/(10000000LL*3600*24);
+        if (days_since_last_write > 365/2) {
+            de.mode = DirMode::FROZEN;
+        }
+        else {
+            de.mode = DirMode::NORMAL;
         }
     }
 
-    if ((uint64_t&)de.max_last_write_time == 0) {
-        de.mode = DirMode::INHERIT_FROM_PARENT;
-        return;
-    }
-
-    int64_t days_since_last_write = ((int64_t&)cur_ft - (int64_t&)de.max_last_write_time)/(10000000LL*3600*24);
-    if (days_since_last_write > 365/2) {
-        de.mode = DirMode::FROZEN;
-    }
-    else {
-        de.mode = DirMode::NORMAL;
-    }
+    // Check if mode is mixed
+    for (auto &&sd : de.subdirs)
+        if ((sd.second.mode != de.mode && sd.second.mode != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
+            de.mode_mixed = true;
+            break;
+        }
 }
 
 DWORD WINAPI initial_scan(LPVOID)
@@ -257,15 +266,19 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
                 DrawIconEx(hdc, r.left, r.top, d.d->expanded ? icon_dir_exp : icon_dir_col, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
             r.left += ICON_SIZE;
-            DirMode mode = d.d->mode;
-            if (mode == DirMode::INHERIT_FROM_PARENT)
-                for (DirEntry *pd = d.d->parent; pd; pd = pd->parent)
-                    if (pd->mode != DirMode::INHERIT_FROM_PARENT) {
-                        mode = pd->mode;
-                        break;
-                    }
-            if (mode != DirMode::INHERIT_FROM_PARENT)
-                DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode-1], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+            if (d.d->mode_mixed)
+                DrawIconEx(hdc, r.left, r.top, mode_mixed_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+            else {
+                DirMode mode = d.d->mode;
+                if (mode == DirMode::INHERIT_FROM_PARENT)
+                    for (DirEntry *pd = d.d->parent; pd; pd = pd->parent)
+                        if (pd->mode != DirMode::INHERIT_FROM_PARENT) {
+                            mode = pd->mode;
+                            break;
+                        }
+                if (mode != DirMode::INHERIT_FROM_PARENT)
+                    DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode-1], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+            }
 
             r.left += ICON_SIZE + LINE_PADDING_LEFT;
             DrawText(hdc, d.name->c_str(), -1, &r, DT_END_ELLIPSIS);

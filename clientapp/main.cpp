@@ -329,10 +329,11 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
     icon_dir_col = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_DIR_COLLAPSED), IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
     icon_dir_exp = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_DIR_EXPANDED),  IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
-    extern HICON mode_icons[4];
+    extern HICON mode_icons[4], mode_mixed_icon;
     int mode_icons_ids[] = {IDI_MINUS_RED, IDI_DOT_GREEN, IDI_SNOWFLAKE, IDI_PLUS_BLUE};
     for (int i=0; i<_countof(mode_icons); i++)
         mode_icons[i] = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(mode_icons_ids[i]), IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
+    mode_mixed_icon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_DOT_YELLOW), IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
