@@ -28,7 +28,12 @@ enum class DirMode
     FROZEN,
     APPEND_ONLY,
 };
-HICON mode_icons[4], mode_mixed_icon;
+const float DIR_PRIORITY_ULTRA_HIGH =  2;
+const float DIR_PRIORITY_HIGH       =  1;
+const float DIR_PRIORITY_NORMAL     =  0;
+const float DIR_PRIORITY_LOW        = -1;
+const float DIR_PRIORITY_ULTRA_LOW  = -2;
+HICON mode_icons[4], mode_mixed_icon, priority_icons[4];
 
 class DirEntry
 {
@@ -40,6 +45,7 @@ public:
     uint64_t size = 0;
     FILETIME max_last_write_time = FILETIME{}; // zero initialization
     DirMode mode = DirMode::INHERIT_FROM_PARENT;
+    float priority = DIR_PRIORITY_NORMAL;
     bool mode_mixed = false;
     bool scan_started = false;
     bool expanded = false;
@@ -143,9 +149,21 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         int64_t days_since_last_write = ((int64_t&)cur_ft - (int64_t&)de.max_last_write_time)/(10000000LL*3600*24);
         if (days_since_last_write > 365/2) {
             de.mode = DirMode::FROZEN;
+            if (level == 1 && de.size > 10*1024*1024)
+                de.priority = days_since_last_write < 365 ? DIR_PRIORITY_LOW : DIR_PRIORITY_ULTRA_LOW;
         }
         else {
             de.mode = DirMode::NORMAL;
+            if (days_since_last_write <= 7 && de.size <= 1024*1024*1024) {
+                de.priority = DIR_PRIORITY_HIGH;
+                std::function<void(DirEntry&)> set_priority_to_normal = [&set_priority_to_normal](DirEntry &de) {
+                    for (auto &&sd : de.subdirs) {
+                        sd.second.priority = DIR_PRIORITY_NORMAL;
+                        set_priority_to_normal(sd.second);
+                    }
+                };
+                set_priority_to_normal(de);
+            }
         }
     }
 
@@ -278,6 +296,11 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
                         }
                 if (mode != DirMode::INHERIT_FROM_PARENT)
                     DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode-1], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+            }
+
+            if (d.d->priority != DIR_PRIORITY_NORMAL) {
+                r.left += ICON_SIZE;
+                DrawIconEx(hdc, r.left, r.top, priority_icons[(d.d->priority > 0 ? 2 : 1) - (int)d.d->priority], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
             }
 
             r.left += ICON_SIZE + LINE_PADDING_LEFT;

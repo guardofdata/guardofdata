@@ -81,5 +81,17 @@
     <Image Include="icons\dot_yellow.ico">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="icons\up_double_arrow_green.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="icons\up_arrow_green.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="icons\down_arrow_red.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="icons\down_double_arrow_red.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>
