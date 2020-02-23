@@ -71,6 +71,9 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             return;
         }
 
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) && !(!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && wcscmp(fd.cFileName, L"desktop.ini") == 0))
+            continue;
+
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_REPARSE_POINT)) // skip hidden files and directories and symbolic links
             if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && wcscmp(fd.cFileName, L".git") == 0)
                 ASSERT((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
