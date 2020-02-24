@@ -43,6 +43,7 @@ public:
 
 class TabProgress : public Tab
 {
+    //Button tree_view, flat_view, group_by_priority;
     virtual void treeview_paint(HDC hdc, int width, int height) override {}
     virtual void treeview_lbdown() override {}
 };

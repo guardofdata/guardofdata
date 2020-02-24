@@ -42,13 +42,16 @@ public:
     std::map<std::wstring, DirEntry> subdirs;
     SpinLock subdirs_lock;
     uint32_t num_of_files = 0;
+    uint32_t num_of_files_excluded = 0;
     uint64_t size = 0;
+    uint64_t size_excluded = 0;
     FILETIME max_last_write_time = FILETIME{}; // zero initialization
     DirMode mode = DirMode::INHERIT_FROM_PARENT;
     float priority = DIR_PRIORITY_NORMAL;
     bool mode_mixed = false;
     bool scan_started = false;
     bool expanded = false;
+    //bool deleted = false;
 };
 
 DirEntry root_dir_entry;
@@ -116,15 +119,21 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             de.max_last_write_time = sd.second.max_last_write_time;
     }
 
-    std::function<void(DirEntry&)> set_inherit_from_parent = [&set_inherit_from_parent](DirEntry &de) {
+    std::function<void(DirEntry&)> set_inherit_from_parent_and_excluded = [&set_inherit_from_parent_and_excluded](DirEntry &de) {
+        de.size_excluded = de.size;
+        de.num_of_files_excluded = de.num_of_files;
         for (auto &&sd : de.subdirs) {
             sd.second.mode = DirMode::INHERIT_FROM_PARENT;
-            set_inherit_from_parent(sd.second);
+            set_inherit_from_parent_and_excluded(sd.second);
         }
     };
     if (ends_with(dir_name, L"/.git") && de.size > 100*1024*1024) {
         de.mode = DirMode::EXCLUDED;
-        set_inherit_from_parent(de);
+        set_inherit_from_parent_and_excluded(de);
+        for (DirEntry *pde = de.parent; pde != nullptr; pde = pde->parent) {
+            pde->size_excluded += de.size;
+            pde->num_of_files_excluded += de.num_of_files;
+        }
         return;
     }
 
@@ -139,6 +148,12 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             fast_make_lowercase_en(&base_name[0]);
             if (base_name.find(L"photo") != base_name.npos) {
                 de.mode = DirMode::APPEND_ONLY;
+                std::function<void(DirEntry&)> set_inherit_from_parent = [&set_inherit_from_parent](DirEntry &de) {
+                    for (auto &&sd : de.subdirs) {
+                        sd.second.mode = DirMode::INHERIT_FROM_PARENT;
+                        set_inherit_from_parent(sd.second);
+                    }
+                };
                 set_inherit_from_parent(de);
                 return;
             }
@@ -203,6 +218,8 @@ void fill_dirs(std::vector<DirItem> &all_dirs, DirEntry &d, int level = 0)
     }
     d.subdirs_lock.release();
 
+    //[-if (sort_by_size) ...-]
+
     for (auto &&di : dirs) {
         all_dirs.push_back(di);
         if (di.d->expanded)
@@ -231,6 +248,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
 
     // Draw hover rect
     treeview_hover_dir_item.d = nullptr;
+    int item_under_mouse;
     POINT cur_pos;
     GetCursorPos(&cur_pos);
     RECT wnd_rect;
@@ -240,7 +258,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
      && cur_pos.x < wnd_rect.right
      && cur_pos.y < wnd_rect.bottom
      && (GetAsyncKeyState(VK_LBUTTON) >= 0 || cur_pos == pressed_cur_pos)) { // do not show hover rect when left mouse button is pressed (during scrolling or pressing some button)
-        int item_under_mouse = (cur_pos.y - wnd_rect.top - TREEVIEW_PADDING + scrollpos) / LINE_HEIGHT;
+        item_under_mouse = (cur_pos.y - wnd_rect.top - TREEVIEW_PADDING + scrollpos) / LINE_HEIGHT;
         if (item_under_mouse < (int)dirs.size()) {
             treeview_hover_dir_item = dirs[item_under_mouse];
             SelectPenAndBrush spb(hdc, RGB(112, 192, 231), RGB(229, 243, 251)); // colors are taken from Windows Explorer
@@ -269,14 +287,19 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
                 const int MB = 1024 * 1024;
                 char s[32];
                 //sprintf_s(s, d.second->size >= 100*MB ? "%.0f" : d.second->size >= 10*MB ? "%.1f" : d.second->size >= MB ? "%.2f" : "%.3f", d.second->size / double(MB));
-                sprintf_s(s, "%.1f", d.d->size / double(MB));
+                sprintf_s(s, "%.1f", (d.d->num_of_files_excluded == d.d->num_of_files ? d.d->size_excluded : d.d->size - d.d->size_excluded) / double(MB));
                 //sprintf_s(s, "%.1f", ((int64_t&)cur_ft - (int64_t&)d.d->max_last_write_time)/(10000000.0*3600*24));
+                COLORREF prev_text_color;
+                if (d.d->num_of_files_excluded > 0)
+                    prev_text_color = SetTextColor(hdc, d.d->num_of_files_excluded == d.d->num_of_files ? RGB(192, 0, 0) : RGB(192, 192, 0));
                 DrawTextA(hdc, s, -1, &r, DT_RIGHT);
 
                 r.right = r.left;
                 r.left -= FILES_COUNT_COLUMN_WIDTH;
-                _itoa_s(d.d->num_of_files, s, 10);
+                _itoa_s(d.d->num_of_files_excluded == d.d->num_of_files ? d.d->num_of_files_excluded : d.d->num_of_files - d.d->num_of_files_excluded, s, 10);
                 DrawTextA(hdc, s, -1, &r, DT_RIGHT);
+                if (d.d->num_of_files_excluded > 0)
+                    SetTextColor(hdc, prev_text_color);
             }
             else
                 DrawText(hdc, L"?", -1, &r, DT_RIGHT);
@@ -311,6 +334,35 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
         }
 
         r.top += LINE_HEIGHT;
+    }
+
+    if (treeview_hover_dir_item.d != nullptr
+     && treeview_hover_dir_item.d->num_of_files_excluded > 0
+     && treeview_hover_dir_item.d->num_of_files_excluded != treeview_hover_dir_item.d->num_of_files) {
+        int i = item_under_mouse + 1, m = 1, p = 0;
+        SelectPenAndBrush spb(hdc, RGB(112, 192, 231), RGB(229, 243, 251)); // colors are taken from Windows Explorer
+        if (TREEVIEW_PADDING - scrollpos + (i+1) * LINE_HEIGHT > wnd_rect.bottom - wnd_rect.top) {
+            i = item_under_mouse - 1;
+            m = 0;
+            p = 1;
+        }
+        RECT r = {width - TREEVIEW_PADDING - DIR_SIZE_COLUMN_WIDTH - FILES_COUNT_COLUMN_WIDTH,
+                          TREEVIEW_PADDING - scrollpos +  i    * LINE_HEIGHT, width - TREEVIEW_PADDING,
+                          TREEVIEW_PADDING - scrollpos + (i+1) * LINE_HEIGHT};
+        Rectangle(hdc, r.left, r.top - m, r.right, r.bottom + p);
+        r.top += LINE_PADDING_TOP;
+        r.bottom = r.top + FONT_HEIGHT;
+        r.right = width - TREEVIEW_PADDING - LINE_PADDING_RIGHT;
+        r.left = r.right - DIR_SIZE_COLUMN_WIDTH;
+        char s[32];
+        sprintf_s(s, "%.1f", treeview_hover_dir_item.d->size_excluded / double(1024*1024));
+        SetTextColor(hdc, RGB(192, 0, 0));
+        DrawTextA(hdc, s, -1, &r, DT_RIGHT);
+
+        r.right = r.left;
+        r.left -= FILES_COUNT_COLUMN_WIDTH;
+        _itoa_s(treeview_hover_dir_item.d->num_of_files_excluded, s, 10);
+        DrawTextA(hdc, s, -1, &r, DT_RIGHT);
     }
 }
 
