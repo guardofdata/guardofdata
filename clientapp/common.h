@@ -90,7 +90,6 @@ public:
 inline std::wstring operator/(const std::wstring &d, const std::wstring &f) {return d.back() == L'/' ? d + f : d + L'/' + f;}
 inline std::wstring operator/(const std::wstring &d, const wchar_t      *f) {return d.back() == L'/' ? d + f : d + L'/' + f;}
 
-extern "C" long _InterlockedExchange(long volatile *, long);
 inline void spin_lock_acquire(volatile long &lock) {if (_InterlockedExchange(&lock, 1)) while (lock || _InterlockedExchange(&lock, 1)) _mm_pause();}
 inline void spin_lock_release(volatile long &lock) {_InterlockedExchange(&lock, 0);}
 

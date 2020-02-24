@@ -152,8 +152,8 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         int64_t days_since_last_write = ((int64_t&)cur_ft - (int64_t&)de.max_last_write_time)/(10000000LL*3600*24);
         if (days_since_last_write > 365/2) {
             de.mode = DirMode::FROZEN;
-            if (level == 1 && de.size > 10*1024*1024)
-                de.priority = days_since_last_write < 365 ? DIR_PRIORITY_LOW : DIR_PRIORITY_ULTRA_LOW;
+            if (/*level == 1 && */de.size > 10*1024*1024)
+                de.priority = /*days_since_last_write < 365 ? */DIR_PRIORITY_LOW/* : DIR_PRIORITY_ULTRA_LOW*/; // there is very little data changed from six months to a year ago, and besides, it makes sense to reserve an ultra low priority for manual selection by the user
         }
         else {
             de.mode = DirMode::NORMAL;
