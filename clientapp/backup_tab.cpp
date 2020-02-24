@@ -341,7 +341,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
      && treeview_hover_dir_item.d->num_of_files_excluded != treeview_hover_dir_item.d->num_of_files) {
         int i = item_under_mouse + 1, m = 1, p = 0;
         SelectPenAndBrush spb(hdc, RGB(112, 192, 231), RGB(229, 243, 251)); // colors are taken from Windows Explorer
-        if (TREEVIEW_PADDING - scrollpos + (i+1) * LINE_HEIGHT > wnd_rect.bottom - wnd_rect.top) {
+        if (TREEVIEW_PADDING - scrollpos + (i+1) * LINE_HEIGHT >= wnd_rect.bottom - wnd_rect.top) { // with `>` bottom outline can disappear (when trying to see this[‘difference between `>` and `>=`’] be aware that single pixel movement of scrollbar thumb can lead to change of `scrollpos` by 2)
             i = item_under_mouse - 1;
             m = 0;
             p = 1;
