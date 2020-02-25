@@ -6,6 +6,7 @@ const int FILES_COUNT_COLUMN_WIDTH = mul_by_system_scaling_factor(50);
 const int TREEVIEW_LEVEL_OFFSET = mul_by_system_scaling_factor(16);
 const int DIR_MODE_LEVELS_AUTO = 2;
 
+TabBackup::SortBy TabBackup::sort_by = SortBy::NAME;
 volatile bool TabBackup::stop_scan = false;
 
 std::unordered_set<std::wstring> always_excluded_directories = {
@@ -218,7 +219,13 @@ void fill_dirs(std::vector<DirItem> &all_dirs, DirEntry &d, int level = 0)
     }
     d.subdirs_lock.release();
 
-    //[-if (sort_by_size) ...-]
+    if (TabBackup::sort_by == TabBackup::SortBy::SIZE)
+        std::sort(dirs.begin(), dirs.end(), [](const DirItem &a, const DirItem &b) {
+            if (a.d->num_of_files_excluded == a.d->num_of_files
+             && b.d->num_of_files_excluded == b.d->num_of_files)
+                return a.d->size > b.d->size;
+            return a.d->size - a.d->size_excluded > b.d->size - b.d->size_excluded;
+        });
 
     for (auto &&di : dirs) {
         all_dirs.push_back(di);
@@ -374,4 +381,17 @@ void TabBackup::treeview_lbdown()
 
     treeview_hover_dir_item.d->expanded = !treeview_hover_dir_item.d->expanded;
     InvalidateRect(treeview_wnd, NULL, FALSE);
+}
+
+void TabBackup::treeview_rbdown()
+{
+    HMENU menu = LoadMenu(h_instance, MAKEINTRESOURCE(IDR_BACKUP_TAB_CONTEXT_MENU));
+    CheckMenuRadioItem(menu, ID_SORTBY_NAME, ID_SORTBY_NAME + (int)SortBy::COUNT - 1, ID_SORTBY_NAME + (int)sort_by, MF_BYCOMMAND);
+    HMENU sub_menu = GetSubMenu(menu, 0);
+    POINT curpos;
+    GetCursorPos(&curpos);
+    auto r = TrackPopupMenu(sub_menu, TPM_LEFTALIGN|TPM_BOTTOMALIGN|TPM_RIGHTBUTTON|TPM_NONOTIFY|TPM_RETURNCMD, curpos.x, curpos.y, 0, treeview_wnd, NULL);
+    if (r != 0)
+        sort_by = SortBy(r - ID_SORTBY_NAME);
+    DestroyMenu(menu);
 }

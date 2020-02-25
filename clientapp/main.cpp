@@ -263,6 +263,10 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
     case WM_LBUTTONDOWN:
         current_tab->treeview_lbdown();
         break;
+
+    case WM_RBUTTONDOWN:
+        current_tab->treeview_rbdown();
+        break;
     }
 
     return DefWindowProc(hwnd, message, wparam, lparam);

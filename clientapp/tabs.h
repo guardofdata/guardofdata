@@ -17,6 +17,7 @@ public:
     virtual int treeview_offsety() const {return 0;}
     virtual void treeview_paint(HDC hdc, int width, int height) = 0;
     virtual void treeview_lbdown() = 0;
+    virtual void treeview_rbdown() = 0;
 };
 
 extern std::unique_ptr<Tab> current_tab;
@@ -29,6 +30,7 @@ class TabBackup : public Tab
     Button filter, cancel_scan;//, restart_scan, start_backup;
 
 public:
+    static enum class SortBy {NAME, SIZE, COUNT} sort_by;
     static volatile bool stop_scan;
 
     TabBackup() :
@@ -39,6 +41,7 @@ public:
     virtual int treeview_offsety() const override {return 40;}
     virtual void treeview_paint(HDC hdc, int width, int height) override;
     virtual void treeview_lbdown() override;
+    virtual void treeview_rbdown() override;
 };
 
 class TabProgress : public Tab
@@ -46,12 +49,14 @@ class TabProgress : public Tab
     //Button tree_view, flat_view, group_by_priority;
     virtual void treeview_paint(HDC hdc, int width, int height) override {}
     virtual void treeview_lbdown() override {}
+    virtual void treeview_rbdown() override {}
 };
 
 class TabLog : public Tab
 {
     virtual void treeview_paint(HDC hdc, int width, int height) override {}
     virtual void treeview_lbdown() override {}
+    virtual void treeview_rbdown() override {}
 };
 
 inline void switch_tab(std::unique_ptr<Tab> &&t)
