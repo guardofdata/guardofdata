@@ -165,22 +165,24 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             return;
         }
 
+        std::function<void(DirEntry&)> set_priority_to_normal = [&set_priority_to_normal](DirEntry &de) {
+            for (auto &&sd : de.subdirs) {
+                sd.second.priority = DIR_PRIORITY_NORMAL;
+                set_priority_to_normal(sd.second);
+            }
+        };
         int64_t days_since_last_write = ((int64_t&)cur_ft - (int64_t&)de.max_last_write_time)/(10000000LL*3600*24);
         if (days_since_last_write > 365/2) {
             de.mode = DirMode::FROZEN;
-            if (/*level == 1 && */de.size > 10*1024*1024)
+            if (/*level == 1 && */de.size > 10*1024*1024) {
                 de.priority = /*days_since_last_write < 365 ? */DIR_PRIORITY_LOW/* : DIR_PRIORITY_ULTRA_LOW*/; // there is very little data changed from six months to a year ago, and besides, it makes sense to reserve an ultra low priority for manual selection by the user
+                set_priority_to_normal(de);
+            }
         }
         else {
             de.mode = DirMode::NORMAL;
             if (days_since_last_write <= 7 && de.size <= 1024*1024*1024) {
                 de.priority = DIR_PRIORITY_HIGH;
-                std::function<void(DirEntry&)> set_priority_to_normal = [&set_priority_to_normal](DirEntry &de) {
-                    for (auto &&sd : de.subdirs) {
-                        sd.second.priority = DIR_PRIORITY_NORMAL;
-                        set_priority_to_normal(sd.second);
-                    }
-                };
                 set_priority_to_normal(de);
             }
         }
@@ -387,7 +389,7 @@ void TabBackup::treeview_rbdown()
 {
     HMENU menu = LoadMenu(h_instance, MAKEINTRESOURCE(IDR_BACKUP_TAB_CONTEXT_MENU));
     CheckMenuRadioItem(menu, ID_SORTBY_NAME, ID_SORTBY_NAME + (int)SortBy::COUNT - 1, ID_SORTBY_NAME + (int)sort_by, MF_BYCOMMAND);
-    HMENU sub_menu = GetSubMenu(menu, 0);
+    HMENU sub_menu = GetSubMenu(menu, 0); // this is necessary (see [http://rsdn.org/article/qna/ui/mnuerr1.xml <- http://rsdn.org/forum/winapi/140595.flat <- google:‘TrackPopupMenu "view as popup"’])
     POINT curpos;
     GetCursorPos(&curpos);
     auto r = TrackPopupMenu(sub_menu, TPM_LEFTALIGN|TPM_BOTTOMALIGN|TPM_RIGHTBUTTON|TPM_NONOTIFY|TPM_RETURNCMD, curpos.x, curpos.y, 0, treeview_wnd, NULL);
