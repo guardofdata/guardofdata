@@ -40,7 +40,29 @@ class DirEntry
 {
 public:
     DirEntry *parent = nullptr;
-    std::map<std::wstring, DirEntry> subdirs;
+    struct Less
+    {
+        wchar_t fast_get_lowercase_en(wchar_t c) const
+        {
+            if (unsigned(int(c) - int(L'A')) <= unsigned(L'Z' - L'A'))
+                return c + (L'a' - L'A');
+            return c;
+        }
+
+        bool operator()(const std::wstring &left, const std::wstring &right) const
+        {
+            for (const wchar_t *l = left.c_str(), *r = right.c_str(); ; l++, r++) {
+                wchar_t lower_l = fast_get_lowercase_en(*l),
+                        lower_r = fast_get_lowercase_en(*r);
+                if (lower_l != lower_r)
+                    return lower_l < lower_r;
+                if (lower_l == 0)
+                    return false;
+            }
+        }
+    };
+    using SubDirs = std::map<std::wstring, DirEntry, Less>;
+    SubDirs subdirs;
     SpinLock subdirs_lock;
     uint32_t num_of_files = 0;
     uint32_t num_of_files_excluded = 0;
@@ -66,7 +88,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
     HANDLE h = FindFirstFile((dir_name / L"*.*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
 
-    std::map<std::wstring, DirEntry> subdirs;
+    DirEntry::SubDirs subdirs;
 
     do
     {

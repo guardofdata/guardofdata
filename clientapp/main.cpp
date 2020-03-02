@@ -350,7 +350,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
     MSG msg;
     BOOL ret;
-    // [https://docs.microsoft.com/ru-ru/windows/win32/winmsg/using-messages-and-message-queues]
+    // [https://docs.microsoft.com/en-us/windows/win32/winmsg/using-messages-and-message-queues]
     while ((ret = GetMessage(&msg, NULL, 0, 0)) != 0) {
         if (ret == -1) {
             ERROR;
