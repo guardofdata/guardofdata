@@ -177,8 +177,10 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
         si.nPage = wr.treeview_wnd_rect.bottom - wr.treeview_wnd_rect.top;
         int smin, smax;
         ScrollBar_GetRange(scrollbar_wnd, &smin, &smax);
-        if (smax < (int)si.nPage)
+        if (smax < (int)si.nPage) {
             EnableWindow(scrollbar_wnd, FALSE);
+            ScrollBar_SetPos(scrollbar_wnd, 0, FALSE);
+        }
         else {
             SetScrollInfo(scrollbar_wnd, SB_CTL, &si, TRUE);
             EnableWindow(scrollbar_wnd, TRUE);
