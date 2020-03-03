@@ -293,7 +293,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
         if (item_under_mouse < (int)dirs.size()) {
             treeview_hover_dir_item = dirs[item_under_mouse];
             SelectPenAndBrush spb(hdc, RGB(112, 192, 231), RGB(229, 243, 251)); // colors are taken from Windows Explorer
-            Rectangle(hdc, TREEVIEW_PADDING + treeview_hover_dir_item.level * TREEVIEW_LEVEL_OFFSET + ICON_SIZE,
+            Rectangle(hdc, TREEVIEW_PADDING + treeview_hover_dir_item.level * TREEVIEW_LEVEL_OFFSET + ICON_SIZE - 1,
                            TREEVIEW_PADDING - scrollpos +  item_under_mouse    * LINE_HEIGHT, width - TREEVIEW_PADDING,
                            TREEVIEW_PADDING - scrollpos + (item_under_mouse+1) * LINE_HEIGHT);
         }
@@ -341,19 +341,22 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
                 DrawIconEx(hdc, r.left, r.top, d.d->expanded ? icon_dir_exp : icon_dir_col, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
             r.left += ICON_SIZE;
-            if (d.d->mode_mixed)
-                DrawIconEx(hdc, r.left, r.top, mode_mixed_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
-            else {
-                DirMode mode = d.d->mode;
-                if (mode == DirMode::INHERIT_FROM_PARENT)
-                    for (DirEntry *pd = d.d->parent; pd; pd = pd->parent)
-                        if (pd->mode != DirMode::INHERIT_FROM_PARENT) {
-                            mode = pd->mode;
-                            break;
-                        }
-                if (mode != DirMode::INHERIT_FROM_PARENT)
-                    DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode-1], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+            if (d.d->mode_mixed) {
+                //DrawIconEx(hdc, r.left, r.top, mode_mixed_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+                static HPEN pen = CreatePen(PS_SOLID, 1, RGB(249, 236, 0));
+                SelectPen(hdc, pen);
+                SelectBrush(hdc, GetStockBrush(HOLLOW_BRUSH));
+                Rectangle(hdc, r.left, r.top, r.left + ICON_SIZE, r.top + ICON_SIZE);
             }
+            DirMode mode = d.d->mode;
+            if (mode == DirMode::INHERIT_FROM_PARENT)
+                for (DirEntry *pd = d.d->parent; pd; pd = pd->parent)
+                    if (pd->mode != DirMode::INHERIT_FROM_PARENT) {
+                        mode = pd->mode;
+                        break;
+                    }
+            if (mode != DirMode::INHERIT_FROM_PARENT)
+                DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode-1], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
             if (d.d->priority != DIR_PRIORITY_NORMAL) {
                 r.left += ICON_SIZE;
