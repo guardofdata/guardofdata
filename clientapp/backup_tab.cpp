@@ -8,6 +8,7 @@ const int DIR_MODE_LEVELS_AUTO = 2;
 
 TabBackup::SortBy TabBackup::sort_by = SortBy::NAME;
 volatile bool TabBackup::stop_scan = false;
+bool popup_menu_is_open = false;
 
 std::unordered_set<std::wstring> always_excluded_directories = {
     L"$Recycle.Bin",
@@ -23,18 +24,20 @@ std::unordered_set<std::wstring> always_excluded_directories = {
 
 enum class DirMode
 {
-    INHERIT_FROM_PARENT,
     EXCLUDED,
     NORMAL,
     FROZEN,
     APPEND_ONLY,
+    INHERIT_FROM_PARENT,
+    AUTO,
+    COUNT
 };
 const float DIR_PRIORITY_ULTRA_HIGH =  2;
 const float DIR_PRIORITY_HIGH       =  1;
 const float DIR_PRIORITY_NORMAL     =  0;
 const float DIR_PRIORITY_LOW        = -1;
 const float DIR_PRIORITY_ULTRA_LOW  = -2;
-HICON mode_icons[4], mode_mixed_icon, priority_icons[4];
+HICON mode_icons[4], mode_mixed_icon, mode_manual_icon, priority_icons[4];
 
 class DirEntry
 {
@@ -69,7 +72,9 @@ public:
     uint64_t size = 0;
     uint64_t size_excluded = 0;
     FILETIME max_last_write_time = FILETIME{}; // zero initialization
-    DirMode mode = DirMode::INHERIT_FROM_PARENT;
+    DirMode mode_auto = DirMode::INHERIT_FROM_PARENT;
+    DirMode mode_manual = DirMode::AUTO;
+    DirMode mode() const {return mode_manual != DirMode::AUTO ? mode_manual : mode_auto;}
     float priority = DIR_PRIORITY_NORMAL;
     bool mode_mixed = false;
     bool scan_started = false;
@@ -146,12 +151,12 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         de.size_excluded = de.size;
         de.num_of_files_excluded = de.num_of_files;
         for (auto &&sd : de.subdirs) {
-            sd.second.mode = DirMode::INHERIT_FROM_PARENT;
+            sd.second.mode_auto = DirMode::INHERIT_FROM_PARENT;
             set_inherit_from_parent_and_excluded(sd.second);
         }
     };
     if (ends_with(dir_name, L"/.git") && de.size > 100*1024*1024) {
-        de.mode = DirMode::EXCLUDED;
+        de.mode_auto = DirMode::EXCLUDED;
         set_inherit_from_parent_and_excluded(de);
         for (DirEntry *pde = de.parent; pde != nullptr; pde = pde->parent) {
             pde->size_excluded += de.size;
@@ -161,7 +166,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
     }
 
     if (level > DIR_MODE_LEVELS_AUTO) {
-        de.mode = DirMode::INHERIT_FROM_PARENT;
+        de.mode_auto = DirMode::INHERIT_FROM_PARENT;
         //return; // no return to check if mode is mixed (e.g. if there is EXCLUDED .git subdirectory)
     }
     else {
@@ -170,10 +175,10 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             std::wstring base_name(dir_name.c_str() + last_slash_pos + 1);
             fast_make_lowercase_en(&base_name[0]);
             if (base_name.find(L"photo") != base_name.npos) {
-                de.mode = DirMode::APPEND_ONLY;
+                de.mode_auto = DirMode::APPEND_ONLY;
                 std::function<void(DirEntry&)> set_inherit_from_parent = [&set_inherit_from_parent](DirEntry &de) {
                     for (auto &&sd : de.subdirs) {
-                        sd.second.mode = DirMode::INHERIT_FROM_PARENT;
+                        sd.second.mode_auto = DirMode::INHERIT_FROM_PARENT;
                         set_inherit_from_parent(sd.second);
                     }
                 };
@@ -183,7 +188,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         }
 
         if ((uint64_t&)de.max_last_write_time == 0) {
-            de.mode = DirMode::INHERIT_FROM_PARENT;
+            de.mode_auto = DirMode::INHERIT_FROM_PARENT;
             return;
         }
 
@@ -195,14 +200,14 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         };
         int64_t days_since_last_write = ((int64_t&)cur_ft - (int64_t&)de.max_last_write_time)/(10000000LL*3600*24);
         if (days_since_last_write > 365/2) {
-            de.mode = DirMode::FROZEN;
+            de.mode_auto = DirMode::FROZEN;
             if (/*level == 1 && */de.size > 10*1024*1024) {
                 de.priority = /*days_since_last_write < 365 ? */DIR_PRIORITY_LOW/* : DIR_PRIORITY_ULTRA_LOW*/; // there is very little data changed from six months to a year ago, and besides, it makes sense to reserve an ultra low priority for manual selection by the user
                 set_priority_to_normal(de);
             }
         }
         else {
-            de.mode = DirMode::NORMAL;
+            de.mode_auto = DirMode::NORMAL;
             if (days_since_last_write <= 7 && de.size <= 1024*1024*1024) {
                 de.priority = DIR_PRIORITY_HIGH;
                 set_priority_to_normal(de);
@@ -212,7 +217,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
 
     // Check if mode is mixed
     for (auto &&sd : de.subdirs)
-        if ((sd.second.mode != de.mode && sd.second.mode != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
+        if ((sd.second.mode_auto != de.mode_auto && sd.second.mode_auto != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
             de.mode_mixed = true;
             break;
         }
@@ -261,6 +266,7 @@ void fill_dirs(std::vector<DirItem> &all_dirs, DirEntry &d, int level = 0)
 POINT pressed_cur_pos;
 bool operator==(const POINT &p1, const POINT &p2) {return memcmp(&p1, &p2, sizeof(POINT)) == 0;}
 DirItem treeview_hover_dir_item = {0};
+int treeview_hover_dir_item_index;
 
 void TabBackup::treeview_paint(HDC hdc, int width, int height)
 {
@@ -277,26 +283,32 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
 
     int scrollpos = ScrollBar_GetPos(scrollbar_wnd);
 
-    // Draw hover rect
-    treeview_hover_dir_item.d = nullptr;
-    int item_under_mouse;
-    POINT cur_pos;
-    GetCursorPos(&cur_pos);
+    // Update hover item
     RECT wnd_rect;
     GetWindowRect(treeview_wnd, &wnd_rect);
-    if (cur_pos.x >= wnd_rect.left
-     && cur_pos.y >= wnd_rect.top
-     && cur_pos.x < wnd_rect.right
-     && cur_pos.y < wnd_rect.bottom
-     && (GetAsyncKeyState(VK_LBUTTON) >= 0 || cur_pos == pressed_cur_pos)) { // do not show hover rect when left mouse button is pressed (during scrolling or pressing some button)
-        item_under_mouse = (cur_pos.y - wnd_rect.top - TREEVIEW_PADDING + scrollpos) / LINE_HEIGHT;
-        if (item_under_mouse < (int)dirs.size()) {
-            treeview_hover_dir_item = dirs[item_under_mouse];
-            SelectPenAndBrush spb(hdc, RGB(112, 192, 231), RGB(229, 243, 251)); // colors are taken from Windows Explorer
-            Rectangle(hdc, TREEVIEW_PADDING + treeview_hover_dir_item.level * TREEVIEW_LEVEL_OFFSET + ICON_SIZE - 1,
-                           TREEVIEW_PADDING - scrollpos +  item_under_mouse    * LINE_HEIGHT, width - TREEVIEW_PADDING,
-                           TREEVIEW_PADDING - scrollpos + (item_under_mouse+1) * LINE_HEIGHT);
+    if (!popup_menu_is_open) {
+        treeview_hover_dir_item.d = nullptr;
+        int item_under_mouse;
+        POINT cur_pos;
+        GetCursorPos(&cur_pos);
+        if (cur_pos.x >= wnd_rect.left
+         && cur_pos.y >= wnd_rect.top
+         && cur_pos.x < wnd_rect.right
+         && cur_pos.y < wnd_rect.bottom
+         && (GetAsyncKeyState(VK_LBUTTON) >= 0 || cur_pos == pressed_cur_pos)) { // do not show hover rect when left mouse button is pressed (during scrolling or pressing some button)
+            item_under_mouse = (cur_pos.y - wnd_rect.top - TREEVIEW_PADDING + scrollpos) / LINE_HEIGHT;
+            if (item_under_mouse < (int)dirs.size()) {
+                treeview_hover_dir_item_index = item_under_mouse;
+                treeview_hover_dir_item = dirs[item_under_mouse];
+            }
         }
+    }
+    // Draw hover rect
+    if (treeview_hover_dir_item.d != nullptr) {
+        SelectPenAndBrush spb(hdc, RGB(112, 192, 231), RGB(229, 243, 251)); // colors are taken from Windows Explorer
+        Rectangle(hdc, TREEVIEW_PADDING + treeview_hover_dir_item.level * TREEVIEW_LEVEL_OFFSET + ICON_SIZE - 1,
+                       TREEVIEW_PADDING - scrollpos +  treeview_hover_dir_item_index    * LINE_HEIGHT, width - TREEVIEW_PADDING,
+                       TREEVIEW_PADDING - scrollpos + (treeview_hover_dir_item_index+1) * LINE_HEIGHT);
     }
 
     // Draw tree view items
@@ -348,15 +360,17 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
                 SelectBrush(hdc, GetStockBrush(HOLLOW_BRUSH));
                 Rectangle(hdc, r.left, r.top, r.left + ICON_SIZE, r.top + ICON_SIZE);
             }
-            DirMode mode = d.d->mode;
+            if (d.d->mode_manual != DirMode::AUTO)
+                DrawIconEx(hdc, r.left, r.top, mode_manual_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+            DirMode mode = d.d->mode();
             if (mode == DirMode::INHERIT_FROM_PARENT)
                 for (DirEntry *pd = d.d->parent; pd; pd = pd->parent)
-                    if (pd->mode != DirMode::INHERIT_FROM_PARENT) {
-                        mode = pd->mode;
+                    if (pd->mode() != DirMode::INHERIT_FROM_PARENT) {
+                        mode = pd->mode();
                         break;
                     }
             if (mode != DirMode::INHERIT_FROM_PARENT)
-                DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode-1], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+                DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
             if (d.d->priority != DIR_PRIORITY_NORMAL) {
                 r.left += ICON_SIZE;
@@ -373,10 +387,10 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
     if (treeview_hover_dir_item.d != nullptr
      && treeview_hover_dir_item.d->num_of_files_excluded > 0
      && treeview_hover_dir_item.d->num_of_files_excluded != treeview_hover_dir_item.d->num_of_files) {
-        int i = item_under_mouse + 1, m = 1, p = 0;
+        int i = treeview_hover_dir_item_index + 1, m = 1, p = 0;
         SelectPenAndBrush spb(hdc, RGB(112, 192, 231), RGB(229, 243, 251)); // colors are taken from Windows Explorer
         if (TREEVIEW_PADDING - scrollpos + (i+1) * LINE_HEIGHT >= wnd_rect.bottom - wnd_rect.top) { // with `>` bottom outline can disappear (when trying to see this[‘difference between `>` and `>=`’] be aware that single pixel movement of scrollbar thumb can lead to change of `scrollpos` by 2)
-            i = item_under_mouse - 1;
+            i = treeview_hover_dir_item_index - 1;
             m = 0;
             p = 1;
         }
@@ -414,11 +428,26 @@ void TabBackup::treeview_rbdown()
 {
     HMENU menu = LoadMenu(h_instance, MAKEINTRESOURCE(IDR_BACKUP_TAB_CONTEXT_MENU));
     CheckMenuRadioItem(menu, ID_SORTBY_NAME, ID_SORTBY_NAME + (int)SortBy::COUNT - 1, ID_SORTBY_NAME + (int)sort_by, MF_BYCOMMAND);
+    if (treeview_hover_dir_item.d != nullptr) {
+        const wchar_t *dir_modes[] = {L"Excluded", L"Normal", L"Frozen", L"Append only", L"Inherit from parent"};
+        ModifyMenu(menu, ID_MODE_AUTO, MF_BYCOMMAND|MF_STRING, ID_MODE_AUTO, (std::wstring(L"Auto [") + dir_modes[(int)treeview_hover_dir_item.d->mode_auto] + L"]").c_str());
+        CheckMenuRadioItem(menu, ID_MODE_EXCLUDED, ID_MODE_EXCLUDED + (int)DirMode::COUNT - 1, ID_MODE_EXCLUDED + (int)treeview_hover_dir_item.d->mode_manual, MF_BYCOMMAND);
+    }
     HMENU sub_menu = GetSubMenu(menu, 0); // this is necessary (see [http://rsdn.org/article/qna/ui/mnuerr1.xml <- http://rsdn.org/forum/winapi/140595.flat <- google:‘TrackPopupMenu "view as popup"’])
     POINT curpos;
     GetCursorPos(&curpos);
-    auto r = TrackPopupMenu(sub_menu, TPM_LEFTALIGN|TPM_BOTTOMALIGN|TPM_RIGHTBUTTON|TPM_NONOTIFY|TPM_RETURNCMD, curpos.x, curpos.y, 0, treeview_wnd, NULL);
+    popup_menu_is_open = true;
+    auto r = TrackPopupMenu(sub_menu, TPM_LEFTALIGN|TPM_TOPALIGN|TPM_RIGHTBUTTON|TPM_NONOTIFY|TPM_RETURNCMD, curpos.x, curpos.y, 0, treeview_wnd, NULL);
     if (r != 0)
-        sort_by = SortBy(r - ID_SORTBY_NAME);
+        if (r < ID_SORTBY_NAME + (int)SortBy::COUNT)
+            sort_by = SortBy(r - ID_SORTBY_NAME);
+        else if (r < ID_MODE_EXCLUDED + (int)DirMode::COUNT) {
+            if (treeview_hover_dir_item.d != nullptr)
+                treeview_hover_dir_item.d->mode_manual = DirMode(r - ID_MODE_EXCLUDED);
+        }
+        else
+            ERROR;
+    popup_menu_is_open = false;
+    treeview_hover_dir_item.d = nullptr; // to prevent expanding hover item when clicking outside of context menu in order to just close it
     DestroyMenu(menu);
 }

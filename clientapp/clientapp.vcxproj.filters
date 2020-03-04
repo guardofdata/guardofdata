@@ -93,5 +93,8 @@
     <Image Include="icons\down_double_arrow_red.ico">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="icons\blue_corners.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>
