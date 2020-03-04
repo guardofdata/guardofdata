@@ -75,6 +75,15 @@ public:
     DirMode mode_auto = DirMode::INHERIT_FROM_PARENT;
     DirMode mode_manual = DirMode::AUTO;
     DirMode mode() const {return mode_manual != DirMode::AUTO ? mode_manual : mode_auto;}
+    DirMode mode_no_ifp() const
+    {
+        if (mode() != DirMode::INHERIT_FROM_PARENT)
+            return mode();
+        for (DirEntry *pd = parent; pd; pd = pd->parent)
+            if (pd->mode() != DirMode::INHERIT_FROM_PARENT)
+                return pd->mode();
+        return DirMode::INHERIT_FROM_PARENT;
+    }
     float priority = DIR_PRIORITY_NORMAL;
     bool mode_mixed = false;
     bool scan_started = false;
@@ -362,13 +371,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
             }
             if (d.d->mode_manual != DirMode::AUTO)
                 DrawIconEx(hdc, r.left, r.top, mode_manual_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
-            DirMode mode = d.d->mode();
-            if (mode == DirMode::INHERIT_FROM_PARENT)
-                for (DirEntry *pd = d.d->parent; pd; pd = pd->parent)
-                    if (pd->mode() != DirMode::INHERIT_FROM_PARENT) {
-                        mode = pd->mode();
-                        break;
-                    }
+            DirMode mode = d.d->mode_no_ifp();
             if (mode != DirMode::INHERIT_FROM_PARENT)
                 DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
@@ -442,8 +445,20 @@ void TabBackup::treeview_rbdown()
         if (r < ID_SORTBY_NAME + (int)SortBy::COUNT)
             sort_by = SortBy(r - ID_SORTBY_NAME);
         else if (r < ID_MODE_EXCLUDED + (int)DirMode::COUNT) {
-            if (treeview_hover_dir_item.d != nullptr)
+            if (treeview_hover_dir_item.d != nullptr) {
                 treeview_hover_dir_item.d->mode_manual = DirMode(r - ID_MODE_EXCLUDED);
+
+                // Update `mode_mixed`
+                for (DirEntry *pd = treeview_hover_dir_item.d->parent; pd; pd = pd->parent) {
+                    pd->mode_mixed = false;
+                    DirMode pd_mode_no_ifp = pd->mode_no_ifp();
+                    for (auto &&sd : pd->subdirs)
+                        if ((sd.second.mode() != pd_mode_no_ifp && sd.second.mode() != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
+                            pd->mode_mixed = true;
+                            break;
+                        }
+                }
+            }
         }
         else
             ERROR;
