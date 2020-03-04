@@ -113,3 +113,10 @@ template <int N> inline bool ends_with(const std::wstring &s, const wchar_t (&su
     size_t suffix_len = N - 1;
     return s.length() >= suffix_len && memcmp(s.c_str() + s.length() - suffix_len, suffix, suffix_len*sizeof(wchar_t)) == 0;
 }
+
+inline std::wstring int_to_str(int i)
+{
+    wchar_t s[12];
+    _itow_s(i, s, 10);
+    return std::wstring(s);
+}

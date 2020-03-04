@@ -91,6 +91,51 @@ public:
     bool scan_started = false;
     bool expanded = false;
     //bool deleted = false;
+
+    void set_mode_manual(DirMode new_mode_manual)
+    {
+        DirMode prev_mode_no_ifp = mode_no_ifp();
+        mode_manual = new_mode_manual;
+
+        // Update `mode_mixed`
+        for (DirEntry *pd = parent; pd; pd = pd->parent) {
+            pd->mode_mixed = false;
+            DirMode pd_mode_no_ifp = pd->mode_no_ifp();
+            for (auto &&sd : pd->subdirs)
+                if ((sd.second.mode() != pd_mode_no_ifp && sd.second.mode() != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
+                    pd->mode_mixed = true;
+                    break;
+                }
+        }
+
+        // Update `num_of_files_excluded` and `size_excluded` if necessary
+        if ((prev_mode_no_ifp == DirMode::EXCLUDED) != (mode_no_ifp() == DirMode::EXCLUDED)) {
+            int64_t prev_size_excluded         = size_excluded;
+            int32_t prev_num_of_files_excluded = num_of_files_excluded;
+            std::function<void(DirEntry&)> recalc_excluded = [&recalc_excluded](DirEntry &de) {
+                if (de.mode_no_ifp() == DirMode::EXCLUDED) {
+                    de.size_excluded = de.dir_files_size;
+                    de.num_of_files_excluded = de.dir_num_of_files;
+                }
+                else {
+                    de.size_excluded = 0;
+                    de.num_of_files_excluded = 0;
+                }
+                for (auto &&sd : de.subdirs) {
+                    recalc_excluded(sd.second);
+                    de.size_excluded += sd.second.size_excluded;
+                    de.num_of_files_excluded += sd.second.num_of_files_excluded;
+                }
+            };
+            recalc_excluded(*this);
+            int64_t delta_size_excluded         = size_excluded         - prev_size_excluded;
+            int32_t delta_num_of_files_excluded = num_of_files_excluded - prev_num_of_files_excluded;
+            for (DirEntry *pde = parent; pde != nullptr; pde = pde->parent) {
+                pde->size_excluded += delta_size_excluded;
+                pde->num_of_files_excluded += delta_num_of_files_excluded;
+            }
+        }
+    }
 };
 
 DirEntry root_dir_entry;
@@ -451,46 +496,96 @@ void TabBackup::treeview_rbdown()
             sort_by = SortBy(r - ID_SORTBY_NAME);
         else if (r < ID_MODE_EXCLUDED + (int)DirMode::COUNT) {
             if (treeview_hover_dir_item.d != nullptr) {
-                DirMode prev_mode_no_ifp = treeview_hover_dir_item.d->mode_no_ifp();
-                treeview_hover_dir_item.d->mode_manual = DirMode(r - ID_MODE_EXCLUDED);
+                DirMode new_mode = DirMode(r - ID_MODE_EXCLUDED);
+                treeview_hover_dir_item.d->set_mode_manual(new_mode);
 
-                // Update `mode_mixed`
-                for (DirEntry *pd = treeview_hover_dir_item.d->parent; pd; pd = pd->parent) {
-                    pd->mode_mixed = false;
-                    DirMode pd_mode_no_ifp = pd->mode_no_ifp();
-                    for (auto &&sd : pd->subdirs)
-                        if ((sd.second.mode() != pd_mode_no_ifp && sd.second.mode() != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
-                            pd->mode_mixed = true;
-                            break;
-                        }
-                }
-
-                // Update `num_of_files_excluded` and `size_excluded` if necessary
-                if ((prev_mode_no_ifp == DirMode::EXCLUDED) != (treeview_hover_dir_item.d->mode_no_ifp() == DirMode::EXCLUDED)) {
-                    int64_t prev_size_excluded         = treeview_hover_dir_item.d->size_excluded;
-                    int32_t prev_num_of_files_excluded = treeview_hover_dir_item.d->num_of_files_excluded;
-                    std::function<void(DirEntry&)> recalc_excluded = [&recalc_excluded](DirEntry &de) {
-                        if (de.mode_no_ifp() == DirMode::EXCLUDED) {
-                            de.size_excluded = de.dir_files_size;
-                            de.num_of_files_excluded = de.dir_num_of_files;
-                        }
-                        else {
-                            de.size_excluded = 0;
-                            de.num_of_files_excluded = 0;
-                        }
+                if (new_mode != DirMode::AUTO) {
+                    std::vector<DirEntry*> manual_distinct;
+                    std::function<void(DirEntry&)> find_manual_distinct = [&find_manual_distinct, new_mode, &manual_distinct](DirEntry &de) {
                         for (auto &&sd : de.subdirs) {
-                            recalc_excluded(sd.second);
-                            de.size_excluded += sd.second.size_excluded;
-                            de.num_of_files_excluded += sd.second.num_of_files_excluded;
+                            if (sd.second.mode_manual != DirMode::AUTO) {
+                                if (new_mode == DirMode::INHERIT_FROM_PARENT) {
+                                    if (sd.second.mode_manual != DirMode::INHERIT_FROM_PARENT)
+                                        manual_distinct.push_back(&sd.second);
+                                }
+                                else
+                                    if (sd.second.mode_manual != new_mode && sd.second.mode_manual != DirMode::INHERIT_FROM_PARENT)
+                                        manual_distinct.push_back(&sd.second);
+                            }
+                            find_manual_distinct(sd.second);
                         }
                     };
-                    recalc_excluded(*treeview_hover_dir_item.d);
-                    int64_t delta_size_excluded         = treeview_hover_dir_item.d->size_excluded         - prev_size_excluded;
-                    int32_t delta_num_of_files_excluded = treeview_hover_dir_item.d->num_of_files_excluded - prev_num_of_files_excluded;
-                    for (DirEntry *pde = treeview_hover_dir_item.d->parent; pde != nullptr; pde = pde->parent) {
-                        pde->size_excluded += delta_size_excluded;
-                        pde->num_of_files_excluded += delta_num_of_files_excluded;
-                    }
+                    find_manual_distinct(*treeview_hover_dir_item.d);
+                    if (!manual_distinct.empty())
+                        if (MessageBox(main_wnd, manual_distinct.size() > 1 ? (L"There are " + int_to_str(manual_distinct.size()) + L" sub-entries which manual mode doesn't match up with new mode.\nWould you like to switch their mode also?").c_str() :
+                                                                                                                            L"There is 1 sub-entry which manual mode doesn't match up with new mode.\nWould you like to switch its mode also?", L"", MB_YESNO) == IDYES)
+                            for (auto &&de : manual_distinct)
+                                if (new_mode != DirMode::INHERIT_FROM_PARENT) {
+                                    // 1. Try auto
+                                    DirMode original_mode_manual = de->mode_manual;
+                                    de->mode_manual = DirMode::AUTO;
+                                    if (de->mode_no_ifp() == new_mode) {
+                                        de->mode_manual = original_mode_manual;
+                                        de->set_mode_manual(DirMode::AUTO);
+                                    }
+                                    else {
+                                        // 2. Try inherit from parent
+                                        de->mode_manual = DirMode::INHERIT_FROM_PARENT;
+                                        if (de->mode_no_ifp() == new_mode) {
+                                            de->mode_manual = original_mode_manual;
+                                            de->set_mode_manual(DirMode::INHERIT_FROM_PARENT);
+                                        }
+                                        else {
+                                            // 3. Nothing more to do except explicitly/forcibly set new mode
+                                            de->mode_manual = original_mode_manual;
+                                            de->set_mode_manual(new_mode);
+                                        }
+                                    }
+                                }
+                                else {
+                                    if (de->mode_auto == DirMode::INHERIT_FROM_PARENT)
+                                        de->set_mode_manual(DirMode::AUTO);
+                                    else
+                                        de->set_mode_manual(DirMode::INHERIT_FROM_PARENT);
+                                }
+
+                    std::vector<DirEntry*> auto_distinct;
+                    std::function<void(DirEntry&)> find_auto_distinct = [&find_auto_distinct, new_mode, &auto_distinct](DirEntry &de) {
+                        for (auto &&sd : de.subdirs) {
+                            if (sd.second.mode_manual == DirMode::AUTO) {
+                                if (new_mode == DirMode::INHERIT_FROM_PARENT) {
+                                    if (sd.second.mode_auto != DirMode::INHERIT_FROM_PARENT)
+                                        auto_distinct.push_back(&sd.second);
+                                }
+                                else
+                                    if (sd.second.mode_auto != new_mode && sd.second.mode_auto != DirMode::INHERIT_FROM_PARENT)
+                                        auto_distinct.push_back(&sd.second);
+                            }
+                            find_auto_distinct(sd.second);
+                        }
+                    };
+                    find_auto_distinct(*treeview_hover_dir_item.d);
+                    if (!auto_distinct.empty())
+                        if (MessageBox(main_wnd, auto_distinct.size() > 1 ? (L"There are " + int_to_str(auto_distinct.size()) + L" sub-entries which automatic mode doesn't match up with new mode.\nWould you like to switch their mode also?").c_str() :
+                                                                                                                        L"There is 1 sub-entry which automatic mode doesn't match up with new mode.\nWould you like to switch its mode also?", L"", MB_YESNO) == IDYES)
+                            for (auto &&de : auto_distinct)
+                                de->set_mode_manual(DirMode::INHERIT_FROM_PARENT);
+                }
+                else {
+                    std::vector<DirEntry*> non_auto;
+                    std::function<void(DirEntry&)> find_non_auto = [&find_non_auto, new_mode, &non_auto](DirEntry &de) {
+                        for (auto &&sd : de.subdirs) {
+                            if (sd.second.mode_manual != DirMode::AUTO)
+                                non_auto.push_back(&sd.second);
+                            find_non_auto(sd.second);
+                        }
+                    };
+                    find_non_auto(*treeview_hover_dir_item.d);
+                    if (!non_auto.empty())
+                        if (MessageBox(main_wnd, non_auto.size() > 1 ? (L"There are " + int_to_str(non_auto.size()) + L" sub-entries which mode is not auto.\nWould you like to switch their mode also?").c_str() :
+                                                                                                              L"There is 1 sub-entry which mode is not auto.\nWould you like to switch its mode also?", L"", MB_YESNO) == IDYES)
+                            for (auto &&de : non_auto)
+                                de->set_mode_manual(DirMode::AUTO);
                 }
             }
         }
