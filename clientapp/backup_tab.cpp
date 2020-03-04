@@ -67,10 +67,12 @@ public:
     using SubDirs = std::map<std::wstring, DirEntry, Less>;
     SubDirs subdirs;
     SpinLock subdirs_lock;
-    uint32_t num_of_files = 0;
-    uint32_t num_of_files_excluded = 0;
-    uint64_t size = 0;
-    uint64_t size_excluded = 0;
+    int32_t dir_num_of_files = 0; // number of files just in this directory
+    int32_t num_of_files = 0; // total number of files including subdirectories
+    int32_t num_of_files_excluded = 0;
+    int64_t dir_files_size = 0; // size of files just in this directory
+    int64_t size = 0; // total size of files including subdirectories
+    int64_t size_excluded = 0;
     FILETIME max_last_write_time = FILETIME{}; // zero initialization
     DirMode mode_auto = DirMode::INHERIT_FROM_PARENT;
     DirMode mode_manual = DirMode::AUTO;
@@ -129,8 +131,8 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             subdirs[file_name].parent = &de;
         }
         else {
-            de.size += (uint64_t(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
-            de.num_of_files++;
+            de.dir_files_size += (uint64_t(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
+            de.dir_num_of_files++;
             if ((uint64_t&)fd.ftLastWriteTime > (uint64_t&)de.max_last_write_time // CompareFileTime() is much slower
                     && (int64_t&)cur_ft - (int64_t&)fd.ftLastWriteTime >= 0) // ignore time in future
                 de.max_last_write_time = fd.ftLastWriteTime;
@@ -138,6 +140,9 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
     } while (FindNextFile(h, &fd));
 
     FindClose(h);
+
+    de.size = de.dir_files_size;
+    de.num_of_files = de.dir_num_of_files;
 
     de.subdirs_lock.acquire();
     de.subdirs = std::move(subdirs);
@@ -446,6 +451,7 @@ void TabBackup::treeview_rbdown()
             sort_by = SortBy(r - ID_SORTBY_NAME);
         else if (r < ID_MODE_EXCLUDED + (int)DirMode::COUNT) {
             if (treeview_hover_dir_item.d != nullptr) {
+                DirMode prev_mode_no_ifp = treeview_hover_dir_item.d->mode_no_ifp();
                 treeview_hover_dir_item.d->mode_manual = DirMode(r - ID_MODE_EXCLUDED);
 
                 // Update `mode_mixed`
@@ -457,6 +463,34 @@ void TabBackup::treeview_rbdown()
                             pd->mode_mixed = true;
                             break;
                         }
+                }
+
+                // Update `num_of_files_excluded` and `size_excluded` if necessary
+                if ((prev_mode_no_ifp == DirMode::EXCLUDED) != (treeview_hover_dir_item.d->mode_no_ifp() == DirMode::EXCLUDED)) {
+                    int64_t prev_size_excluded         = treeview_hover_dir_item.d->size_excluded;
+                    int32_t prev_num_of_files_excluded = treeview_hover_dir_item.d->num_of_files_excluded;
+                    std::function<void(DirEntry&)> recalc_excluded = [&recalc_excluded](DirEntry &de) {
+                        if (de.mode_no_ifp() == DirMode::EXCLUDED) {
+                            de.size_excluded = de.dir_files_size;
+                            de.num_of_files_excluded = de.dir_num_of_files;
+                        }
+                        else {
+                            de.size_excluded = 0;
+                            de.num_of_files_excluded = 0;
+                        }
+                        for (auto &&sd : de.subdirs) {
+                            recalc_excluded(sd.second);
+                            de.size_excluded += sd.second.size_excluded;
+                            de.num_of_files_excluded += sd.second.num_of_files_excluded;
+                        }
+                    };
+                    recalc_excluded(*treeview_hover_dir_item.d);
+                    int64_t delta_size_excluded         = treeview_hover_dir_item.d->size_excluded         - prev_size_excluded;
+                    int32_t delta_num_of_files_excluded = treeview_hover_dir_item.d->num_of_files_excluded - prev_num_of_files_excluded;
+                    for (DirEntry *pde = treeview_hover_dir_item.d->parent; pde != nullptr; pde = pde->parent) {
+                        pde->size_excluded += delta_size_excluded;
+                        pde->num_of_files_excluded += delta_num_of_files_excluded;
+                    }
                 }
             }
         }
