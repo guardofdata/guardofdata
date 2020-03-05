@@ -16,6 +16,9 @@ std::unordered_set<std::wstring> always_excluded_directories = {
     L"Program Files (x86)",
     L"Users",
     L"Windows",
+    // For Windows XP:
+    L"WINDOWS",
+    L"Documents and Settings",
 };
 // By default ‘<UserProfile>\AppData\Local’ and ‘<UserProfile>\AppData\LocalLow’ are excluded (also .git directories which size is more than 100MB are excluded)
 // C/<UserProfile> <- %USERPROFILE% or [UserProfiles]/<UserName>
@@ -38,6 +41,7 @@ const float DIR_PRIORITY_NORMAL     =  0;
 const float DIR_PRIORITY_LOW        = -1;
 const float DIR_PRIORITY_ULTRA_LOW  = -2;
 HICON mode_icons[4], mode_mixed_icon, mode_manual_icon, priority_icons[4];
+HBITMAP mode_bitmaps[4], mode_bitmaps_selected[4];
 
 class DirEntry
 {
@@ -481,14 +485,23 @@ void TabBackup::treeview_rbdown()
 {
     HMENU menu = LoadMenu(h_instance, MAKEINTRESOURCE(IDR_BACKUP_TAB_CONTEXT_MENU));
     CheckMenuRadioItem(menu, ID_SORTBY_NAME, ID_SORTBY_NAME + (int)SortBy::COUNT - 1, ID_SORTBY_NAME + (int)sort_by, MF_BYCOMMAND);
+
+    for (int i=0; i<_countof(mode_bitmaps); i++)
+        SetMenuItemBitmaps(menu, ID_MODE_EXCLUDED + i, MF_BYCOMMAND, mode_bitmaps[i], mode_bitmaps_selected[i]);
+
     if (treeview_hover_dir_item.d != nullptr) {
+        if (treeview_hover_dir_item.d->mode_auto != DirMode::INHERIT_FROM_PARENT)
+            SetMenuItemBitmaps(menu, ID_MODE_AUTO, MF_BYCOMMAND, mode_bitmaps[(int)treeview_hover_dir_item.d->mode_auto], mode_bitmaps_selected[(int)treeview_hover_dir_item.d->mode_auto]);
+
         const wchar_t *dir_modes[] = {L"Excluded", L"Normal", L"Frozen", L"Append only", L"Inherit from parent"};
         ModifyMenu(menu, ID_MODE_AUTO, MF_BYCOMMAND|MF_STRING, ID_MODE_AUTO, (std::wstring(L"Auto [") + dir_modes[(int)treeview_hover_dir_item.d->mode_auto] + L"]").c_str());
         CheckMenuRadioItem(menu, ID_MODE_EXCLUDED, ID_MODE_EXCLUDED + (int)DirMode::COUNT - 1, ID_MODE_EXCLUDED + (int)treeview_hover_dir_item.d->mode_manual, MF_BYCOMMAND);
     }
+
     HMENU sub_menu = GetSubMenu(menu, 0); // this is necessary (see [http://rsdn.org/article/qna/ui/mnuerr1.xml <- http://rsdn.org/forum/winapi/140595.flat <- google:‘TrackPopupMenu "view as popup"’])
     POINT curpos;
     GetCursorPos(&curpos);
+
     popup_menu_is_open = true;
     auto r = TrackPopupMenu(sub_menu, TPM_LEFTALIGN|TPM_TOPALIGN|TPM_RIGHTBUTTON|TPM_NONOTIFY|TPM_RETURNCMD, curpos.x, curpos.y, 0, treeview_wnd, NULL);
     if (r != 0)
@@ -593,5 +606,6 @@ void TabBackup::treeview_rbdown()
             ERROR;
     popup_menu_is_open = false;
     treeview_hover_dir_item.d = nullptr; // to prevent expanding hover item when clicking outside of context menu in order to just close it
+
     DestroyMenu(menu);
 }

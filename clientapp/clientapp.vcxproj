@@ -105,6 +105,14 @@
     <ResourceCompile Include="clientapp.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="bitmaps\dot_green.bmp" />
+    <Image Include="bitmaps\dot_green_selected.bmp" />
+    <Image Include="bitmaps\minus_red.bmp" />
+    <Image Include="bitmaps\minus_red_selected.bmp" />
+    <Image Include="bitmaps\plus_blue.bmp" />
+    <Image Include="bitmaps\plus_blue_selected.bmp" />
+    <Image Include="bitmaps\snowflake.bmp" />
+    <Image Include="bitmaps\snowflake_selected.bmp" />
     <Image Include="clientapp.ico" />
     <Image Include="icons\blue_corners.ico" />
     <Image Include="icons\dir_collapsed.ico" />

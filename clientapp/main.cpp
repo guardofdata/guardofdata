@@ -343,6 +343,12 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     for (int i=0; i<_countof(priority_icons); i++)
         priority_icons[i] = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_UP_DOUBLE_ARROW_GREEN + i), IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
 
+    extern HBITMAP mode_bitmaps[4], mode_bitmaps_selected[4];
+    for (int i=0; i<_countof(mode_bitmaps); i++) {
+        mode_bitmaps[i]          = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_MINUS_RED          + i), IMAGE_BITMAP, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
+        mode_bitmaps_selected[i] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_MINUS_RED_SELECTED + i), IMAGE_BITMAP, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
+    }
+
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
 
