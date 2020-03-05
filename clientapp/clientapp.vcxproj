@@ -113,6 +113,8 @@
     <Image Include="bitmaps\plus_blue_selected.bmp" />
     <Image Include="bitmaps\snowflake.bmp" />
     <Image Include="bitmaps\snowflake_selected.bmp" />
+    <Image Include="bitmaps\snowflake_selected_small.bmp" />
+    <Image Include="bitmaps\snowflake_small.bmp" />
     <Image Include="clientapp.ico" />
     <Image Include="icons\blue_corners.ico" />
     <Image Include="icons\dir_collapsed.ico" />

@@ -120,5 +120,11 @@
     <Image Include="bitmaps\plus_blue_selected.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="bitmaps\snowflake_small.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="bitmaps\snowflake_selected_small.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

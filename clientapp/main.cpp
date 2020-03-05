@@ -348,6 +348,10 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         mode_bitmaps[i]          = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_MINUS_RED          + i), IMAGE_BITMAP, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
         mode_bitmaps_selected[i] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_MINUS_RED_SELECTED + i), IMAGE_BITMAP, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
     }
+    if (GetSystemMetrics(SM_CXMENUCHECK) == 15) {
+        mode_bitmaps         [IDB_SNOWFLAKE - IDB_MINUS_RED] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_SNOWFLAKE_SMALL         ), IMAGE_BITMAP, 0, 0, 0);
+        mode_bitmaps_selected[IDB_SNOWFLAKE - IDB_MINUS_RED] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_SNOWFLAKE_SELECTED_SMALL), IMAGE_BITMAP, 0, 0, 0);
+    }
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
