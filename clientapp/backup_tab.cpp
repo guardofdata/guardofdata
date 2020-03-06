@@ -40,6 +40,7 @@ const float DIR_PRIORITY_HIGH       =  1;
 const float DIR_PRIORITY_NORMAL     =  0;
 const float DIR_PRIORITY_LOW        = -1;
 const float DIR_PRIORITY_ULTRA_LOW  = -2;
+const float DIR_PRIORITY_AUTO       = FLT_MIN;
 HICON mode_icons[4], mode_mixed_icon, mode_manual_icon, priority_icons[4];
 HBITMAP mode_bitmaps[4], mode_bitmaps_selected[4];
 
@@ -90,7 +91,9 @@ public:
                 return pd->mode();
         return DirMode::INHERIT_FROM_PARENT;
     }
-    float priority = DIR_PRIORITY_NORMAL;
+    float priority_auto = DIR_PRIORITY_NORMAL;
+    float priority_manual = DIR_PRIORITY_AUTO;
+    float priority() const {return priority_manual == DIR_PRIORITY_AUTO ? priority_auto : priority_manual;}
     bool mode_mixed = false;
     bool scan_started = false;
     bool expanded = false;
@@ -242,6 +245,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
                 std::function<void(DirEntry&)> set_inherit_from_parent = [&set_inherit_from_parent](DirEntry &de) {
                     for (auto &&sd : de.subdirs) {
                         sd.second.mode_auto = DirMode::INHERIT_FROM_PARENT;
+                        sd.second.priority_auto = DIR_PRIORITY_NORMAL;
                         set_inherit_from_parent(sd.second);
                     }
                 };
@@ -257,7 +261,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
 
         std::function<void(DirEntry&)> set_priority_to_normal = [&set_priority_to_normal](DirEntry &de) {
             for (auto &&sd : de.subdirs) {
-                sd.second.priority = DIR_PRIORITY_NORMAL;
+                sd.second.priority_auto = DIR_PRIORITY_NORMAL;
                 set_priority_to_normal(sd.second);
             }
         };
@@ -265,14 +269,14 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         if (days_since_last_write > 365/2) {
             de.mode_auto = DirMode::FROZEN;
             if (/*level == 1 && */de.size > 10*1024*1024) {
-                de.priority = /*days_since_last_write < 365 ? */DIR_PRIORITY_LOW/* : DIR_PRIORITY_ULTRA_LOW*/; // there is very little data changed from six months to a year ago, and besides, it makes sense to reserve an ultra low priority for manual selection by the user
+                de.priority_auto = /*days_since_last_write < 365 ? */DIR_PRIORITY_LOW/* : DIR_PRIORITY_ULTRA_LOW*/; // there is very little data changed from six months to a year ago, and besides, it makes sense to reserve an ultra low priority for manual selection by the user
                 set_priority_to_normal(de);
             }
         }
         else {
             de.mode_auto = DirMode::NORMAL;
             if (days_since_last_write <= 7 && de.size <= 1024*1024*1024) {
-                de.priority = DIR_PRIORITY_HIGH;
+                de.priority_auto = DIR_PRIORITY_HIGH;
                 set_priority_to_normal(de);
             }
         }
@@ -429,9 +433,12 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
             if (mode != DirMode::INHERIT_FROM_PARENT)
                 DrawIconEx(hdc, r.left, r.top, mode_icons[(int)mode], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
-            if (d.d->priority != DIR_PRIORITY_NORMAL) {
+            if (d.d->priority() != DIR_PRIORITY_NORMAL || d.d->priority_manual != DIR_PRIORITY_AUTO) {
                 r.left += ICON_SIZE;
-                DrawIconEx(hdc, r.left, r.top, priority_icons[(d.d->priority > 0 ? 2 : 1) - (int)d.d->priority], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+                if (d.d->priority_manual != DIR_PRIORITY_AUTO)
+                    DrawIconEx(hdc, r.left, r.top, mode_manual_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+                if (d.d->priority() != DIR_PRIORITY_NORMAL)
+                    DrawIconEx(hdc, r.left, r.top, priority_icons[(d.d->priority() > 0 ? 2 : 1) - (int)d.d->priority()], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
             }
 
             r.left += ICON_SIZE + LINE_PADDING_LEFT;
@@ -496,6 +503,10 @@ void TabBackup::treeview_rbdown()
         const wchar_t *dir_modes[] = {L"Excluded", L"Normal", L"Frozen", L"Append only", L"Inherit from parent"};
         ModifyMenu(menu, ID_MODE_AUTO, MF_BYCOMMAND|MF_STRING, ID_MODE_AUTO, (std::wstring(L"Auto [") + dir_modes[(int)treeview_hover_dir_item.d->mode_auto] + L"]").c_str());
         CheckMenuRadioItem(menu, ID_MODE_EXCLUDED, ID_MODE_EXCLUDED + (int)DirMode::COUNT - 1, ID_MODE_EXCLUDED + (int)treeview_hover_dir_item.d->mode_manual, MF_BYCOMMAND);
+
+        const wchar_t *dir_priorities[] = {L"Ultra high", L"High", L"Normal", L"Low", L"Ultra low"};
+        ModifyMenu(menu, ID_PRIORITY_AUTO, MF_BYCOMMAND|MF_STRING, ID_PRIORITY_AUTO, (std::wstring(L"Auto priority [") + dir_priorities[2 - (int)treeview_hover_dir_item.d->priority_auto] + L"]").c_str());
+        CheckMenuRadioItem(menu, ID_PRIORITY_ULTRAHIGH, ID_PRIORITY_AUTO, treeview_hover_dir_item.d->priority_manual == DIR_PRIORITY_AUTO ? ID_PRIORITY_AUTO : ID_PRIORITY_ULTRAHIGH + (2 - (int)treeview_hover_dir_item.d->priority_manual), MF_BYCOMMAND);
     }
 
     HMENU sub_menu = GetSubMenu(menu, 0); // this is necessary (see [http://rsdn.org/article/qna/ui/mnuerr1.xml <- http://rsdn.org/forum/winapi/140595.flat <- google:‘TrackPopupMenu "view as popup"’])
@@ -599,6 +610,41 @@ void TabBackup::treeview_rbdown()
                                                                                                               L"There is 1 sub-entry which mode is not auto.\nWould you like to switch its mode also?", L"", MB_YESNO) == IDYES)
                             for (auto &&de : non_auto)
                                 de->set_mode_manual(DirMode::AUTO);
+                }
+            }
+        }
+        else if (r <= ID_PRIORITY_AUTO) {
+            if (treeview_hover_dir_item.d != nullptr) {
+                float priorities[] = {DIR_PRIORITY_ULTRA_HIGH, DIR_PRIORITY_HIGH, DIR_PRIORITY_NORMAL, DIR_PRIORITY_LOW, DIR_PRIORITY_ULTRA_LOW, DIR_PRIORITY_AUTO};
+                float new_priority = priorities[r - ID_PRIORITY_ULTRAHIGH];
+                treeview_hover_dir_item.d->priority_manual = new_priority;
+
+                if (new_priority == DIR_PRIORITY_AUTO) {
+                    std::function<void(DirEntry&)> set_priority_to_auto = [&set_priority_to_auto](DirEntry &de) {
+                        for (auto &&sd : de.subdirs) {
+                            sd.second.priority_manual = DIR_PRIORITY_AUTO;
+                            set_priority_to_auto(sd.second);
+                        }
+                    };
+                    set_priority_to_auto(*treeview_hover_dir_item.d);
+                }
+                else {
+                    std::function<void(DirEntry&)> set_priority = [&set_priority, new_priority](DirEntry &de) {
+                        for (auto &&sd : de.subdirs) {
+                            if (sd.second.priority_manual == DIR_PRIORITY_AUTO) {
+                                if (sd.second.priority_auto != new_priority && sd.second.priority_auto != DIR_PRIORITY_NORMAL)
+                                    sd.second.priority_manual = new_priority;
+                            }
+                            else {
+                                if (sd.second.priority_auto == DIR_PRIORITY_NORMAL || sd.second.priority_auto == new_priority)
+                                    sd.second.priority_manual = DIR_PRIORITY_AUTO;
+                                else
+                                    sd.second.priority_manual = new_priority;
+                            }
+                            set_priority(sd.second);
+                        }
+                    };
+                    set_priority(*treeview_hover_dir_item.d);
                 }
             }
         }
