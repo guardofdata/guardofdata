@@ -126,5 +126,8 @@
     <Image Include="bitmaps\snowflake_selected_small.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="icons\menu_item_selection.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

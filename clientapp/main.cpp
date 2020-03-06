@@ -274,6 +274,37 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
     return DefWindowProc(hwnd, message, wparam, lparam);
 }
 
+// [https://www.gamedev.net/forums/topic/617849-win32-draw-to-bitmap/ <- google:‘winapi draw into bitmap’]
+void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HBITMAP *bitmap_unchecked, HBITMAP *bitmap_checked)
+{
+    HDC hdc_screen = GetDC(NULL);
+    HDC hdc_bmp = CreateCompatibleDC(hdc_screen);
+    int width  = GetSystemMetrics(SM_CXMENUCHECK),
+        height = GetSystemMetrics(SM_CYMENUCHECK);
+
+    // Create unchecked bitmap
+    *bitmap_unchecked = CreateCompatibleBitmap(hdc_screen, width, height);
+    HBITMAP hbm_old = (HBITMAP)SelectObject(hdc_bmp, *bitmap_unchecked);
+
+    // Draw unchecked bitmap
+    RECT r = {0, 0, width, height};
+    FillRect(hdc_bmp, &r, GetSysColorBrush(COLOR_MENU));
+    DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
+
+    // Create checked bitmap
+    *bitmap_checked = CreateCompatibleBitmap(hdc_screen, width, height);
+    SelectObject(hdc_bmp, *bitmap_checked);
+
+    // Draw checked bitmap
+    DrawIconEx(hdc_bmp, 0, 0, checked_background, width, height, 0, NULL, DI_NORMAL);
+    DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
+
+    // Clean up the GDI objects we've created
+    SelectObject(hdc_bmp, hbm_old);
+    DeleteDC(hdc_bmp);
+    ReleaseDC(NULL, hdc_screen);
+}
+
 int APIENTRY _tWinMain(HINSTANCE hInstance,
                        HINSTANCE hPrevInstance,
                        LPTSTR    lpCmdLine,
@@ -352,6 +383,12 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         mode_bitmaps         [IDB_SNOWFLAKE - IDB_MINUS_RED] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_SNOWFLAKE_SMALL         ), IMAGE_BITMAP, 0, 0, 0);
         mode_bitmaps_selected[IDB_SNOWFLAKE - IDB_MINUS_RED] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_SNOWFLAKE_SELECTED_SMALL), IMAGE_BITMAP, 0, 0, 0);
     }
+
+    extern HBITMAP priority_bitmaps[5], priority_bitmaps_selected[5];
+    HICON menu_item_selection_icon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_MENU_ITEM_SELECTION), IMAGE_ICON, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
+    for (int i=0; i<_countof(priority_bitmaps); i++)
+        if (i != 2)
+            create_menu_item_bitmaps_from_icon(priority_icons[i < 2 ? i : i - 1], menu_item_selection_icon, &priority_bitmaps[i], &priority_bitmaps_selected[i]);
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);

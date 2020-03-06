@@ -123,6 +123,7 @@
     <Image Include="icons\dot_yellow.ico" />
     <Image Include="icons\down_arrow_red.ico" />
     <Image Include="icons\down_double_arrow_red.ico" />
+    <Image Include="icons\menu_item_selection.ico" />
     <Image Include="icons\minus_red.ico" />
     <Image Include="icons\plus_blue.ico" />
     <Image Include="icons\snowflake.ico" />

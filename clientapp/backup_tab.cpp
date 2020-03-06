@@ -43,6 +43,7 @@ const float DIR_PRIORITY_ULTRA_LOW  = -2;
 const float DIR_PRIORITY_AUTO       = FLT_MIN;
 HICON mode_icons[4], mode_mixed_icon, mode_manual_icon, priority_icons[4];
 HBITMAP mode_bitmaps[4], mode_bitmaps_selected[4];
+HBITMAP priority_bitmaps[5], priority_bitmaps_selected[5];
 
 class DirEntry
 {
@@ -500,6 +501,8 @@ void TabBackup::treeview_rbdown()
 
     for (int i=0; i<_countof(mode_bitmaps); i++)
         SetMenuItemBitmaps(menu, ID_MODE_EXCLUDED + i, MF_BYCOMMAND, mode_bitmaps[i], mode_bitmaps_selected[i]);
+    for (int i=0; i<_countof(priority_bitmaps); i++)
+        SetMenuItemBitmaps(menu, ID_PRIORITY_ULTRAHIGH + i, MF_BYCOMMAND, priority_bitmaps[i], priority_bitmaps_selected[i]);
 
     if (treeview_hover_dir_item.d != nullptr) {
         if (treeview_hover_dir_item.d->mode_auto != DirMode::INHERIT_FROM_PARENT)
@@ -508,6 +511,8 @@ void TabBackup::treeview_rbdown()
         const wchar_t *dir_modes[] = {L"Excluded", L"Normal", L"Frozen", L"Append only", L"Inherit from parent"};
         ModifyMenu(menu, ID_MODE_AUTO, MF_BYCOMMAND|MF_STRING, ID_MODE_AUTO, (std::wstring(L"Auto [") + dir_modes[(int)treeview_hover_dir_item.d->mode_auto] + L"]").c_str());
         CheckMenuRadioItem(menu, ID_MODE_EXCLUDED, ID_MODE_EXCLUDED + (int)DirMode::COUNT - 1, ID_MODE_EXCLUDED + (int)treeview_hover_dir_item.d->mode_manual, MF_BYCOMMAND);
+
+        SetMenuItemBitmaps(menu, ID_PRIORITY_AUTO, MF_BYCOMMAND, priority_bitmaps[2 - (int)treeview_hover_dir_item.d->priority_auto], priority_bitmaps_selected[2 - (int)treeview_hover_dir_item.d->priority_auto]);
 
         const wchar_t *dir_priorities[] = {L"Ultra high", L"High", L"Normal", L"Low", L"Ultra low"};
         ModifyMenu(menu, ID_PRIORITY_AUTO, MF_BYCOMMAND|MF_STRING, ID_PRIORITY_AUTO, (std::wstring(L"Auto priority [") + dir_priorities[2 - (int)treeview_hover_dir_item.d->priority_auto] + L"]").c_str());
