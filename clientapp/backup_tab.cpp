@@ -435,8 +435,13 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
 
             if (d.d->priority() != DIR_PRIORITY_NORMAL || d.d->priority_manual != DIR_PRIORITY_AUTO) {
                 r.left += ICON_SIZE;
-                if (d.d->priority_manual != DIR_PRIORITY_AUTO)
-                    DrawIconEx(hdc, r.left, r.top, mode_manual_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+                if (d.d->priority_manual != DIR_PRIORITY_AUTO) {
+                    //DrawIconEx(hdc, r.left, r.top, mode_manual_icon, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
+                    static HPEN pen = CreatePen(PS_SOLID, 1, RGB(128, 128, 255));
+                    SelectPen(hdc, pen);
+                    SelectBrush(hdc, GetStockBrush(HOLLOW_BRUSH));
+                    Rectangle(hdc, r.left, r.top, r.left + ICON_SIZE, r.top + ICON_SIZE);
+                }
                 if (d.d->priority() != DIR_PRIORITY_NORMAL)
                     DrawIconEx(hdc, r.left, r.top, priority_icons[(d.d->priority() > 0 ? 2 : 1) - (int)d.d->priority()], ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
             }
