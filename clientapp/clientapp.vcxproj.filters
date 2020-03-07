@@ -96,36 +96,6 @@
     <Image Include="icons\blue_corners.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="bitmaps\minus_red.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\dot_green.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\snowflake.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\plus_blue.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\minus_red_selected.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\dot_green_selected.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\snowflake_selected.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\plus_blue_selected.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\snowflake_small.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="bitmaps\snowflake_selected_small.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="icons\menu_item_selection.ico">
       <Filter>Resource Files</Filter>
     </Image>

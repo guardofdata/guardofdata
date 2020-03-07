@@ -274,13 +274,32 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
     return DefWindowProc(hwnd, message, wparam, lparam);
 }
 
+const int ICO_RES_SIZE = 64;
+
+// [http://forums.codeguru.com/showthread.php?128649-using-StretchBlt-with-HBITMAP-how <- google:‘StretchBlt’]
+void stretch_bitmap(HDC hdc_screen, HDC hdc_bmp, HBITMAP *bitmap)
+{
+    int res_width  = GetSystemMetrics(SM_CXMENUCHECK),
+        res_height = GetSystemMetrics(SM_CYMENUCHECK);
+
+    HBITMAP res_bmp = CreateCompatibleBitmap(hdc_screen, res_width, res_height);
+    HDC res_hdc = CreateCompatibleDC(hdc_screen);
+    HBITMAP hbm_old = (HBITMAP)SelectObject(res_hdc, res_bmp);
+    SetStretchBltMode(res_hdc, HALFTONE);
+    StretchBlt(res_hdc, 0, 0, res_width, res_height, hdc_bmp, 0, 0, ICO_RES_SIZE, ICO_RES_SIZE, SRCCOPY);
+    *bitmap = res_bmp;
+
+    SelectObject(res_hdc, hbm_old);
+    DeleteDC(res_hdc);
+}
+
 // [https://www.gamedev.net/forums/topic/617849-win32-draw-to-bitmap/ <- google:‘winapi draw into bitmap’]
 void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HBITMAP *bitmap_unchecked, HBITMAP *bitmap_checked)
 {
     HDC hdc_screen = GetDC(NULL);
     HDC hdc_bmp = CreateCompatibleDC(hdc_screen);
-    int width  = GetSystemMetrics(SM_CXMENUCHECK),
-        height = GetSystemMetrics(SM_CYMENUCHECK);
+    int width  = ICO_RES_SIZE,
+        height = ICO_RES_SIZE;
 
     // Create unchecked bitmap
     *bitmap_unchecked = CreateCompatibleBitmap(hdc_screen, width, height);
@@ -290,6 +309,7 @@ void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HB
     RECT r = {0, 0, width, height};
     FillRect(hdc_bmp, &r, GetSysColorBrush(COLOR_MENU));
     DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
+    stretch_bitmap(hdc_screen, hdc_bmp, bitmap_unchecked);
 
     // Create checked bitmap
     *bitmap_checked = CreateCompatibleBitmap(hdc_screen, width, height);
@@ -298,6 +318,7 @@ void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HB
     // Draw checked bitmap
     DrawIconEx(hdc_bmp, 0, 0, checked_background, width, height, 0, NULL, DI_NORMAL);
     DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
+    stretch_bitmap(hdc_screen, hdc_bmp, bitmap_checked);
 
     // Clean up the GDI objects we've created
     SelectObject(hdc_bmp, hbm_old);
@@ -374,21 +395,15 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     for (int i=0; i<_countof(priority_icons); i++)
         priority_icons[i] = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_UP_DOUBLE_ARROW_GREEN + i), IMAGE_ICON, ICON_SIZE, ICON_SIZE, 0);
 
+    HICON menu_item_selection_icon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_MENU_ITEM_SELECTION), IMAGE_ICON, ICO_RES_SIZE, ICO_RES_SIZE, 0);
     extern HBITMAP mode_bitmaps[4], mode_bitmaps_selected[4];
-    for (int i=0; i<_countof(mode_bitmaps); i++) {
-        mode_bitmaps[i]          = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_MINUS_RED          + i), IMAGE_BITMAP, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
-        mode_bitmaps_selected[i] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_MINUS_RED_SELECTED + i), IMAGE_BITMAP, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
-    }
-    if (GetSystemMetrics(SM_CXMENUCHECK) == 15) {
-        mode_bitmaps         [IDB_SNOWFLAKE - IDB_MINUS_RED] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_SNOWFLAKE_SMALL         ), IMAGE_BITMAP, 0, 0, 0);
-        mode_bitmaps_selected[IDB_SNOWFLAKE - IDB_MINUS_RED] = (HBITMAP)LoadImage(hInstance, MAKEINTRESOURCE(IDB_SNOWFLAKE_SELECTED_SMALL), IMAGE_BITMAP, 0, 0, 0);
-    }
+    for (int i=0; i<_countof(mode_bitmaps); i++)
+        create_menu_item_bitmaps_from_icon((HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_MINUS_RED + i), IMAGE_ICON, ICO_RES_SIZE, ICO_RES_SIZE, 0), menu_item_selection_icon, &mode_bitmaps[i], &mode_bitmaps_selected[i]);
 
     extern HBITMAP priority_bitmaps[5], priority_bitmaps_selected[5];
-    HICON menu_item_selection_icon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_MENU_ITEM_SELECTION), IMAGE_ICON, GetSystemMetrics(SM_CXMENUCHECK), GetSystemMetrics(SM_CYMENUCHECK), 0);
     for (int i=0; i<_countof(priority_bitmaps); i++)
         if (i != 2)
-            create_menu_item_bitmaps_from_icon(priority_icons[i < 2 ? i : i - 1], menu_item_selection_icon, &priority_bitmaps[i], &priority_bitmaps_selected[i]);
+            create_menu_item_bitmaps_from_icon((HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_UP_DOUBLE_ARROW_GREEN + (i < 2 ? i : i - 1)), IMAGE_ICON, ICO_RES_SIZE, ICO_RES_SIZE, 0), menu_item_selection_icon, &priority_bitmaps[i], &priority_bitmaps_selected[i]);
 
     if (wcsstr(GetCommandLine(), L" --show-window"))
         ShowWindow(main_wnd, SW_NORMAL);
