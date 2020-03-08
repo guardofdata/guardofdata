@@ -274,24 +274,37 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
     return DefWindowProc(hwnd, message, wparam, lparam);
 }
 
-const int ICO_RES_SIZE = 64;
-
-// [http://forums.codeguru.com/showthread.php?128649-using-StretchBlt-with-HBITMAP-how <- google:‘StretchBlt’]
-void stretch_bitmap(HDC hdc_screen, HDC hdc_bmp, HBITMAP *bitmap)
+void stretch_bitmap(HDC hdc_screen, HBITMAP *bitmap)
 {
+    BITMAP src_bmp;
+    GetObject(*bitmap, sizeof(BITMAP), &src_bmp);
+    int src_width  = src_bmp.bmWidth,
+        src_height = src_bmp.bmHeight;
+
+    BITMAPINFOHEADER bi = {0};
+    bi.biSize = sizeof(BITMAPINFOHEADER);
+    bi.biWidth = src_width;
+    bi.biHeight = -src_height; // inspired by [https://www.codeproject.com/Tips/150253/Create-bitmap-from-pixels <- google:‘winapi create bitmap from pixels’]
+    bi.biPlanes = 1;
+    bi.biBitCount = 32;
+    bi.biCompression = BI_RGB;
+    std::vector<uint32_t> sbits(src_width * src_height);
+    GetDIBits(hdc_screen, *bitmap, 0, src_height, sbits.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+
     int res_width  = GetSystemMetrics(SM_CXMENUCHECK),
         res_height = GetSystemMetrics(SM_CYMENUCHECK);
+    std::vector<uint32_t> dbits(res_width * res_height);
 
-    HBITMAP res_bmp = CreateCompatibleBitmap(hdc_screen, res_width, res_height);
-    HDC res_hdc = CreateCompatibleDC(hdc_screen);
-    HBITMAP hbm_old = (HBITMAP)SelectObject(res_hdc, res_bmp);
-    SetStretchBltMode(res_hdc, HALFTONE);
-    StretchBlt(res_hdc, 0, 0, res_width, res_height, hdc_bmp, 0, 0, ICO_RES_SIZE, ICO_RES_SIZE, SRCCOPY);
-    *bitmap = res_bmp;
+//     for (int y=0; y<res_height; y++)
+//         for (int x=0; x<res_width; x++)
+//             dbits[x + y * res_width] = sbits[x * src_width / res_width + (y * src_height / res_height) * src_width];
+    extern void area_averaging_image_scale(uint32_t *dst, int dst_width, int dst_height, const uint32_t *src, int src_width, int src_height);
+    area_averaging_image_scale(dbits.data(), res_width, res_height, sbits.data(), src_width, src_height);
 
-    SelectObject(res_hdc, hbm_old);
-    DeleteDC(res_hdc);
+    *bitmap = CreateBitmap(res_width, res_height, 1, 32, dbits.data()); // [https://stackoverflow.com/a/55895127/2692494 <- google:‘winapi create bitmap from pixels’]
 }
+
+const int ICO_RES_SIZE = 64;
 
 // [https://www.gamedev.net/forums/topic/617849-win32-draw-to-bitmap/ <- google:‘winapi draw into bitmap’]
 void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HBITMAP *bitmap_unchecked, HBITMAP *bitmap_checked)
@@ -309,7 +322,7 @@ void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HB
     RECT r = {0, 0, width, height};
     FillRect(hdc_bmp, &r, GetSysColorBrush(COLOR_MENU));
     DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
-    stretch_bitmap(hdc_screen, hdc_bmp, bitmap_unchecked);
+    stretch_bitmap(hdc_screen, bitmap_unchecked);
 
     // Create checked bitmap
     *bitmap_checked = CreateCompatibleBitmap(hdc_screen, width, height);
@@ -318,7 +331,7 @@ void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HB
     // Draw checked bitmap
     DrawIconEx(hdc_bmp, 0, 0, checked_background, width, height, 0, NULL, DI_NORMAL);
     DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
-    stretch_bitmap(hdc_screen, hdc_bmp, bitmap_checked);
+    stretch_bitmap(hdc_screen, bitmap_checked);
 
     // Clean up the GDI objects we've created
     SelectObject(hdc_bmp, hbm_old);

@@ -47,6 +47,9 @@
     <ClCompile Include="backup_tab.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="scale.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="clientapp.rc">
