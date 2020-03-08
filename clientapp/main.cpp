@@ -274,7 +274,7 @@ LRESULT CALLBACK treeview_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARA
     return DefWindowProc(hwnd, message, wparam, lparam);
 }
 
-void stretch_bitmap(HDC hdc_screen, HBITMAP *bitmap)
+void downscale_bitmap(HDC hdc_screen, HBITMAP *bitmap)
 {
     BITMAP src_bmp;
     GetObject(*bitmap, sizeof(BITMAP), &src_bmp);
@@ -295,9 +295,6 @@ void stretch_bitmap(HDC hdc_screen, HBITMAP *bitmap)
         res_height = GetSystemMetrics(SM_CYMENUCHECK);
     std::vector<uint32_t> dbits(res_width * res_height);
 
-//     for (int y=0; y<res_height; y++)
-//         for (int x=0; x<res_width; x++)
-//             dbits[x + y * res_width] = sbits[x * src_width / res_width + (y * src_height / res_height) * src_width];
     extern void area_averaging_image_scale(uint32_t *dst, int dst_width, int dst_height, const uint32_t *src, int src_width, int src_height);
     area_averaging_image_scale(dbits.data(), res_width, res_height, sbits.data(), src_width, src_height);
 
@@ -322,7 +319,7 @@ void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HB
     RECT r = {0, 0, width, height};
     FillRect(hdc_bmp, &r, GetSysColorBrush(COLOR_MENU));
     DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
-    stretch_bitmap(hdc_screen, bitmap_unchecked);
+    downscale_bitmap(hdc_screen, bitmap_unchecked);
 
     // Create checked bitmap
     *bitmap_checked = CreateCompatibleBitmap(hdc_screen, width, height);
@@ -331,7 +328,7 @@ void create_menu_item_bitmaps_from_icon(HICON icon, HICON checked_background, HB
     // Draw checked bitmap
     DrawIconEx(hdc_bmp, 0, 0, checked_background, width, height, 0, NULL, DI_NORMAL);
     DrawIconEx(hdc_bmp, 0, 0, icon, width, height, 0, NULL, DI_NORMAL);
-    stretch_bitmap(hdc_screen, bitmap_checked);
+    downscale_bitmap(hdc_screen, bitmap_checked);
 
     // Clean up the GDI objects we've created
     SelectObject(hdc_bmp, hbm_old);
