@@ -12,6 +12,20 @@ HICON icon_dir_col, icon_dir_exp;
 std::vector<std::unique_ptr<Button>> tab_buttons;
 std::unique_ptr<Tab> current_tab;
 
+void error_fn(const char *file, int line)
+{
+    char s[300];
+    sprintf_s(s, "Error at file %s (%i)", file, line);
+    MessageBoxA(main_wnd, s, NULL, MB_OK);
+}
+
+void assertion_failed(const char *file, int line)
+{
+    char s[300];
+    sprintf_s(s, "Assertion failed!\nFile: %s\nLine: %i", file, line);
+    MessageBoxA(main_wnd, s, NULL, MB_OK);
+}
+
 struct TV_SB_WndRects
 {
     RECT treeview_wnd_rect, scrollbar_wnd_rect;

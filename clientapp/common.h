@@ -5,11 +5,12 @@
 #include <windowsx.h>
 
 
-#include <assert.h>
 #undef ERROR
-#define ERROR assert(false)
+#define ERROR error_fn(__FILE__, __LINE__)
+void error_fn(const char *file, int line);
 
-#define ASSERT assert
+#define ASSERT(expr) ((expr) || (assertion_failed(__FILE__, __LINE__), false))
+void assertion_failed(const char *file, int line);
 
 extern HINSTANCE h_instance;
 extern HWND main_wnd, treeview_wnd, scrollbar_wnd;
