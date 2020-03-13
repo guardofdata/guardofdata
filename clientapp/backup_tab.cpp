@@ -670,6 +670,8 @@ void TabBackup::treeview_rbdown()
 
 INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
+    static std::vector<std::unique_ptr<Button>> buttons;
+
     switch (message)
     {
     case WM_INITDIALOG: {
@@ -706,7 +708,14 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
                     + int64_to_str(free_bytes_available_to_caller.QuadPart / (1024*1024*1024)) + L" GB free)").c_str()), i);
             }
 
+        buttons.push_back(std::make_unique<Button>(dlg_wnd, IDOK));
+        buttons.push_back(std::make_unique<Button>(dlg_wnd, IDCANCEL));
+
         return TRUE; }
+
+    case WM_DRAWITEM:
+        InvalidateRect(((DRAWITEMSTRUCT*)lparam)->hwndItem, NULL, TRUE); // needed for correct visual switching to/from PRESSED state
+        return TRUE;
 
     case WM_COMMAND:
         switch (LOWORD(wparam))
@@ -725,6 +734,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
                 break;
             } }
         case IDCANCEL:
+            buttons.clear();
             EndDialog(dlg_wnd, LOWORD(wparam));
             return TRUE;
         }
