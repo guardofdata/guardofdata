@@ -19,7 +19,7 @@ class Button
 
     HWND but_wnd;
     bool hover = false, selected = false, disabled = false;
-    int posx, posy, width, height;
+    int width, height;
     const wchar_t *text;
     std::wstring stext;
 
@@ -28,7 +28,7 @@ class Button
 public:
     UINT id;
 
-    Button(UINT id, const wchar_t *text, int posx_, int posy_, int width_, int height_);
+    Button(UINT id, const wchar_t *text, int posx, int posy, int width_, int height_);
     Button(HWND dlg_wnd, UINT id);
     ~Button() {if (but_wnd) DestroyWindow(but_wnd);}
 

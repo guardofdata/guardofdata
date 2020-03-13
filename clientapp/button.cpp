@@ -6,10 +6,10 @@
 HFONT button_font, button_font_bold, treeview_font;
 static WNDPROC btn_old_wnd_proc = NULL;
 
-Button::Button(UINT id, const wchar_t *text, int posx_, int posy_, int width_, int height_) : id(id), text(text)
+Button::Button(UINT id, const wchar_t *text, int posx, int posy, int width_, int height_) : id(id), text(text)
 {
-    posx = mul_by_system_scaling_factor(posx_);
-    posy = mul_by_system_scaling_factor(posy_);
+    posx = mul_by_system_scaling_factor(posx);
+    posy = mul_by_system_scaling_factor(posy);
     width = mul_by_system_scaling_factor(width_);
     height = mul_by_system_scaling_factor(height_);
     but_wnd = CreateWindow(L"BUTTON", L"", WS_VISIBLE|WS_CHILD|BS_OWNERDRAW, posx, posy, width, height, main_wnd, (HMENU)id, h_instance, NULL);
@@ -28,12 +28,8 @@ Button::Button(HWND dlg_wnd, UINT id) : but_wnd(NULL), id(id)
 
     HWND bwnd = GetDlgItem(dlg_wnd, id);
 
-    // [https://stackoverflow.com/a/20535798/2692494 <- google:‘getwindowrect parent’/google:‘getwindowrect relative to parent’]
     RECT rc;
     GetClientRect(bwnd, &rc);
-    MapWindowPoints(bwnd, GetParent(bwnd), (LPPOINT)&rc, 2);
-    posx = rc.left;
-    posy = rc.right;
     width  = rc.right - rc.left;
     height = rc.bottom - rc.top;
 
