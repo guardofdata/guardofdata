@@ -295,6 +295,8 @@ DWORD WINAPI initial_scan(LPVOID)
 {
     GetSystemTimeAsFileTime(&cur_ft);
     enum_files_recursively(L"C:", root_dir_entry);
+    backup_state = BackupState::SCAN_COMPLETED;
+    SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // needed to update backup tab if it is already active
     return 0;
 }
 
@@ -664,4 +666,70 @@ void TabBackup::treeview_rbdown()
     treeview_hover_dir_item.d = nullptr; // to prevent expanding hover item when clicking outside of context menu in order to just close it
 
     DestroyMenu(menu);
+}
+
+INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    switch (message)
+    {
+    case WM_INITDIALOG: {
+        HWND drives_list = GetDlgItem(dlg_wnd, IDC_DRIVES_LIST);
+        DWORD drives = GetLogicalDrives();
+        for (int i=0; i<26; i++)
+            if (drives & (1 << i)) {
+                std::wstring drive_letter_str(1, L'A' + i);
+
+                wchar_t device_name[255] = L"\0";
+                QueryDosDevice((drive_letter_str + L':').c_str(), device_name, _countof(device_name)); // [http://delphi-hlp.ru/index.php/rabota-s-zhelezom/diski.html?start=11 <- google:‘GetDiskFreeSpaceEx for "disk a"’]
+                if (std::wstring(device_name).find(L"\\Device\\Floppy") == 0)
+                    continue; // skip floppy drives; this is needed to supress error message box:
+// ---------------------------
+// Windows - Устройство не готово
+// ---------------------------
+// Exception Processing Message c00000a3 Parameters 75b3bf7c 4 75b3bf7c 75b3bf7c
+// ---------------------------
+// Отмена   Повторить   Продолжить
+// ---------------------------
+                // \\ Another solution is to call `SetErrorMode(SEM_FAILCRITICALERRORS)` ([https://forum.sources.ru/index.php?showtopic=83601 <- google:‘GetDiskFreeSpace for floppy’]),
+                // \\ but there will still be a few seconds delay in `GetDiskFreeSpaceEx()` call for floppy drives
+
+                ULARGE_INTEGER free_bytes_available_to_caller;
+                if (!GetDiskFreeSpaceEx((drive_letter_str + L":\\").c_str(), &free_bytes_available_to_caller, NULL, NULL))
+                    continue;
+                if (free_bytes_available_to_caller.QuadPart == 0)
+                    continue;
+
+                wchar_t label[MAX_PATH+1] = L"\0";
+                GetVolumeInformation((drive_letter_str + L":\\").c_str(), label, _countof(label), NULL, NULL, NULL, NULL, 0);
+                ListBox_SetItemData(drives_list, ListBox_AddString(drives_list, (
+                    drive_letter_str + L" [" + label + L"] ("
+                    + int64_to_str(free_bytes_available_to_caller.QuadPart / (1024*1024*1024)) + L" GB free)").c_str()), i);
+            }
+
+        return TRUE; }
+
+    case WM_COMMAND:
+        switch (LOWORD(wparam))
+        {
+        case IDOK: {
+            HWND drives_list = GetDlgItem(dlg_wnd, IDC_DRIVES_LIST);
+            if (ListBox_GetCurSel(drives_list) == LB_ERR) {
+                MessageBox(dlg_wnd, L"Please select a drive for storing local backup", NULL, MB_OK);
+                break;
+            }
+            int selected_drive = ListBox_GetItemData(drives_list, ListBox_GetCurSel(drives_list));
+            ULARGE_INTEGER free_bytes_available_to_caller;
+            ASSERT(GetDiskFreeSpaceEx((std::wstring(1, L'A' + selected_drive) + L":\\").c_str(), &free_bytes_available_to_caller, NULL, NULL));
+            if (uint64_t(root_dir_entry.size) * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
+                MessageBox(dlg_wnd, L"Not enough free disk space", NULL, MB_OK);
+                break;
+            } }
+        case IDCANCEL:
+            EndDialog(dlg_wnd, LOWORD(wparam));
+            return TRUE;
+        }
+        break;
+    }
+
+    return FALSE;
 }

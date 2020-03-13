@@ -16,6 +16,13 @@ extern HINSTANCE h_instance;
 extern HWND main_wnd, treeview_wnd, scrollbar_wnd;
 extern HICON icon_dir_col, icon_dir_exp;
 
+extern enum class BackupState
+{
+    SCAN_STARTED,
+    SCAN_CANCELLED,
+    SCAN_COMPLETED,
+} backup_state;
+
 // [https://blog.softwareverify.com/how-to-make-your-mfc-or-non-mfc-program-support-high-dpi-monitors-the-easy-way/ <- https://www.codeproject.com/Messages/5452471/Re-create-a-dpi-aware-application.aspx <- google:‘codeproject dpiaware windows 7 site:www.codeproject.com’]
 inline int mul_by_system_scaling_factor(int i)
 {
@@ -119,5 +126,12 @@ inline std::wstring int_to_str(int i)
 {
     wchar_t s[12];
     _itow_s(i, s, 10);
+    return std::wstring(s);
+}
+
+inline std::wstring int64_to_str(int64_t i)
+{
+    wchar_t s[21];
+    _i64tow_s(i, s, _countof(s), 10);
     return std::wstring(s);
 }

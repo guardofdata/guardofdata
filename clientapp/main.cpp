@@ -9,6 +9,7 @@ HINSTANCE h_instance;
 HWND main_wnd, treeview_wnd, scrollbar_wnd;
 int scrollbar_width;
 HICON icon_dir_col, icon_dir_exp;
+BackupState backup_state = BackupState::SCAN_STARTED;
 std::vector<std::unique_ptr<Button>> tab_buttons;
 std::unique_ptr<Tab> current_tab;
 
@@ -141,6 +142,10 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
             case IDB_TAB_LOG:      switch_tab(std::make_unique<TabLog     >()); break;
             }
             PostMessage(hwnd, WM_SIZE, 0, 0);
+            break;
+
+        case IDB_START_BACKUP:
+            DialogBox(h_instance, MAKEINTRESOURCE(IDD_BACKUP_DRIVE_SELECTION), hwnd, backup_drive_selection_dlg_proc);
             break;
         }
         return 0;
