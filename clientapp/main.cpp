@@ -2,6 +2,8 @@
 #include "resource.h"
 #include "tabs.h"
 
+#pragma comment (lib, "winmm.lib")
+
 const UINT WM_TRAY = WM_USER;
 #define RECTARGS(rect) (rect).left, (rect).top, (rect).right-(rect).left, (rect).bottom-(rect).top
 
@@ -457,6 +459,13 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
     TabBackup::stop_scan = true;
     WaitForSingleObject(initial_scan_thread, INFINITE);
+    extern bool stop_apply_directory_changes_thread;
+    extern HANDLE apply_directory_changes_thread;
+    stop_apply_directory_changes_thread = true;
+    void stop_monitoring();
+    stop_monitoring();
+    WaitForSingleObject(apply_directory_changes_thread, INFINITE);
+
     tab_buttons.clear(); // may be unnecessary
     current_tab.reset(); // may be unnecessary
 

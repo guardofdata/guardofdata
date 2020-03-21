@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <mmsystem.h>
 
 // C RunTime Header Files
 #include <stdlib.h>

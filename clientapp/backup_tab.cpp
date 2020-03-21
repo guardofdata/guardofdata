@@ -668,6 +668,225 @@ void TabBackup::treeview_rbdown()
     DestroyMenu(menu);
 }
 
+char local_backup_drive;
+
+class MonitoredDir
+{
+    HANDLE read_directory_changes_thread;
+
+public:
+    std::wstring dir_name;
+    bool stop = false;
+
+    MonitoredDir(const std::wstring &dir_name) : dir_name(dir_name)
+    {
+        DWORD WINAPI read_directory_changes_thread_proc(LPVOID md);
+        read_directory_changes_thread = CreateThread(NULL, 0, read_directory_changes_thread_proc, this, 0, NULL);
+    }
+    ~MonitoredDir()
+    {
+        ASSERT(stop);
+        WaitForSingleObject(read_directory_changes_thread, INFINITE);
+    }
+};
+std::vector<std::unique_ptr<MonitoredDir>> monitored_dirs;
+
+void stop_monitoring()
+{
+    for (auto &md : monitored_dirs)
+        md->stop = true;
+    monitored_dirs.clear();
+}
+
+struct DirChange
+{
+    enum class Operation
+    {
+        CREATE,
+        MODIFY, // MODIFY is better than CHANGE because ‘modified/modification time’
+        RENAME,
+        MOVE,
+#undef DELETE
+        DELETE
+    } operation;
+    std::wstring fname;
+    std::wstring new_fname;
+    int time;
+};
+std::list<DirChange> dir_changes;
+SpinLock dir_changes_lock;
+
+void add_dir_change(DirChange::Operation operation, const std::wstring &fname, const std::wstring &new_fname = std::wstring())
+{
+    DirChange dc;
+    dc.time = timeGetTime();
+
+    dir_changes_lock.acquire();
+    if (operation == DirChange::Operation::MODIFY)
+        for (auto &&d : dir_changes)
+            if (d.operation == DirChange::Operation::MODIFY && d.fname == fname) {
+                d.time = dc.time; // just update time
+                goto skip_add;
+            }
+    dc.operation = operation;
+    dc.fname = fname;
+    dc.new_fname = new_fname;
+    dir_changes.push_back(std::move(dc));
+skip_add:
+    dir_changes_lock.release();
+}
+
+DWORD WINAPI read_directory_changes_thread_proc(LPVOID md)
+{
+    HANDLE dir_handle = CreateFileW((((MonitoredDir*)md)->dir_name + L'\\').c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED|FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    ASSERT(dir_handle != INVALID_HANDLE_VALUE);
+
+    OVERLAPPED opd;
+    opd.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+    std::wstring just_removed_file_name;
+
+    for(;;)
+    {
+        char fni_buf[10000];
+        if (!ReadDirectoryChangesW(dir_handle, fni_buf, sizeof(fni_buf), TRUE, FILE_NOTIFY_CHANGE_FILE_NAME|FILE_NOTIFY_CHANGE_DIR_NAME|FILE_NOTIFY_CHANGE_LAST_WRITE, NULL, &opd, NULL))
+            ERROR;
+        DWORD dwNumberOfBytesTransfered;
+        for(;;)
+            if (GetOverlappedResult(dir_handle, &opd, &dwNumberOfBytesTransfered, FALSE))
+            {
+                FILE_NOTIFY_INFORMATION *fni = (FILE_NOTIFY_INFORMATION*)fni_buf, *next_fni;
+                if (!just_removed_file_name.empty()) {
+                    if (fni->Action == FILE_ACTION_ADDED && path_base_name(just_removed_file_name) == path_base_name(std::wstring(fni->FileName, fni->FileNameLength/sizeof(WCHAR)))) {
+                        add_dir_change(DirChange::Operation::MOVE, just_removed_file_name, std::wstring(fni->FileName, fni->FileNameLength/sizeof(WCHAR)));
+                        just_removed_file_name.clear();
+                        if (fni->NextEntryOffset == 0)
+                            break;
+                        fni = (FILE_NOTIFY_INFORMATION*)((char*)fni + fni->NextEntryOffset);
+                    }
+                    else {
+                        add_dir_change(DirChange::Operation::DELETE, just_removed_file_name);
+                        just_removed_file_name.clear();
+                    }
+                }
+
+                for (; ;fni = next_fni)
+                {
+                    next_fni = (FILE_NOTIFY_INFORMATION*)((char*)fni + fni->NextEntryOffset);
+                    std::wstring fname(fni->FileName, fni->FileNameLength/sizeof(WCHAR));
+                    DirChange::Operation operation;
+                    switch (fni->Action)
+                    {
+                    case FILE_ACTION_ADDED:
+                        operation = DirChange::Operation::CREATE;
+                        break;
+                    case FILE_ACTION_REMOVED:
+                        if (next_fni->Action == FILE_ACTION_ADDED && path_base_name(fname) == path_base_name(std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)))) {
+                            add_dir_change(DirChange::Operation::MOVE, fname, std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)));
+                            fni = next_fni;
+                            next_fni = (FILE_NOTIFY_INFORMATION*)((char*)fni + fni->NextEntryOffset);
+                            goto continue_;
+                        }
+                        else {
+                            if (!just_removed_file_name.empty()) {
+                                add_dir_change(DirChange::Operation::DELETE, just_removed_file_name);
+                                //just_removed_file_name.clear();
+                            }
+                            just_removed_file_name = fname;
+                            goto continue_;
+                        }
+                        break;
+                    case FILE_ACTION_MODIFIED:
+                        if (GetFileAttributes(fname.c_str()) & FILE_ATTRIBUTE_DIRECTORY) // skip this action because there are excess modify directory notifications
+                            goto continue_;
+                        operation = DirChange::Operation::MODIFY;
+                        break;
+                    case FILE_ACTION_RENAMED_OLD_NAME:
+                        if (next_fni->Action == FILE_ACTION_RENAMED_NEW_NAME) {
+                            add_dir_change(DirChange::Operation::RENAME, fname, std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)));
+                            fni = next_fni;
+                            next_fni = (FILE_NOTIFY_INFORMATION*)((char*)fni + fni->NextEntryOffset);
+                            goto continue_;
+                        }
+                        else
+                            ERROR;
+                        break;
+                    case FILE_ACTION_RENAMED_NEW_NAME:
+                        ERROR;
+                        break;
+                    }
+                    add_dir_change(operation, fname);
+continue_:
+                    if (fni->NextEntryOffset == 0) break;
+                }
+                break;
+            } else {
+                if (!just_removed_file_name.empty()) {
+                    add_dir_change(DirChange::Operation::DELETE, just_removed_file_name);
+                    just_removed_file_name.clear();
+                }
+                if (((MonitoredDir*)md)->stop)
+                    goto break_;
+                Sleep(100);
+            }
+    }
+break_:
+
+    CloseHandle(opd.hEvent);
+    CloseHandle(dir_handle);
+    return 0;
+}
+
+HANDLE apply_directory_changes_thread;
+bool stop_apply_directory_changes_thread = false;
+DWORD WINAPI apply_directory_changes_thread_proc(LPVOID md)
+{
+    while (!stop_apply_directory_changes_thread) {
+        int time = timeGetTime();
+        std::list<DirChange> tdir_changes;
+
+        dir_changes_lock.acquire();
+        for (auto it = dir_changes.begin(); it != dir_changes.end();) {
+            if (it->operation == DirChange::Operation::MODIFY && time - it->time < 1000) {
+                ++it;
+                continue;
+            }
+            tdir_changes.push_back(DirChange());
+            std::swap(tdir_changes.back(), *it);
+            it = dir_changes.erase(it);
+        }
+        dir_changes_lock.release();
+
+        for (auto &&dc : tdir_changes) {
+            wchar_t s[30+MAX_PATH*2], *ops[] = {L"CREATE", L"MODIFY", L"RENAME", L"MOVE", L"DELETE"};
+            int n = wsprintf(s, L"%s %s", ops[(int)dc.operation], dc.fname.c_str());
+            if (!dc.new_fname.empty())
+                wsprintf(s + n, L" -> %s\n", dc.new_fname.c_str());
+            else
+                s[n] = L'\n', s[n+1] = 0;
+            OutputDebugString(s);
+        }
+
+        Sleep(250);
+    }
+
+    return 0;
+}
+
+void collect_monitored_dirs(const std::wstring &dir_name, DirEntry &de)
+{
+    DirMode mode = de.mode_no_ifp();
+    ASSERT(mode != DirMode::INHERIT_FROM_PARENT);
+
+    if (mode == DirMode::EXCLUDED) {
+        if (de.mode_mixed) // may be there are some non-excluded subdirectories
+            for (auto &&sd : de.subdirs)
+                collect_monitored_dirs(dir_name / sd.first, sd.second);
+    }
+    else
+        monitored_dirs.push_back(std::make_unique<MonitoredDir>(dir_name));
+}
+
 INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
     static std::vector<std::unique_ptr<Button>> buttons;
@@ -684,7 +903,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
                 wchar_t device_name[255] = L"\0";
                 QueryDosDevice((drive_letter_str + L':').c_str(), device_name, _countof(device_name)); // [http://delphi-hlp.ru/index.php/rabota-s-zhelezom/diski.html?start=11 <- google:‘GetDiskFreeSpaceEx for "disk a"’]
                 if (std::wstring(device_name).find(L"\\Device\\Floppy") == 0)
-                    continue; // skip floppy drives; this is needed to supress error message box:
+                    continue; // skip floppy drives; this is needed to suppress error message box:
 // ---------------------------
 // Windows - Устройство не готово
 // ---------------------------
@@ -732,7 +951,13 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
             if (uint64_t(root_dir_entry.size) * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
                 MessageBox(dlg_wnd, L"Not enough free disk space", NULL, MB_OK);
                 break;
-            } }
+            }
+
+            local_backup_drive = 'A' + selected_drive;
+            backup_state = BackupState::BACKUP_STARTED;
+            collect_monitored_dirs(L"C:", root_dir_entry);
+            apply_directory_changes_thread = CreateThread(NULL, 0, apply_directory_changes_thread_proc, NULL, 0, NULL);
+            SendMessage(main_wnd, WM_COMMAND, IDB_TAB_PROGRESS, 0); }
         case IDCANCEL:
             buttons.clear();
             EndDialog(dlg_wnd, LOWORD(wparam));

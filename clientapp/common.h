@@ -21,6 +21,7 @@ extern enum class BackupState
     SCAN_STARTED,
     SCAN_CANCELLED,
     SCAN_COMPLETED,
+    BACKUP_STARTED,
 } backup_state;
 
 // [https://blog.softwareverify.com/how-to-make-your-mfc-or-non-mfc-program-support-high-dpi-monitors-the-easy-way/ <- https://www.codeproject.com/Messages/5452471/Re-create-a-dpi-aware-application.aspx <- google:‘codeproject dpiaware windows 7 site:www.codeproject.com’]
@@ -97,6 +98,12 @@ public:
 
 inline std::wstring operator/(const std::wstring &d, const std::wstring &f) {return d.back() == L'/' ? d + f : d + L'/' + f;}
 inline std::wstring operator/(const std::wstring &d, const wchar_t      *f) {return d.back() == L'/' ? d + f : d + L'/' + f;}
+
+inline std::wstring path_base_name(const std::wstring &path)
+{
+    size_t p = path.find_last_of(L"\\/");
+    return p != std::wstring::npos ? path.substr(p + 1) : path;
+}
 
 inline void spin_lock_acquire(volatile long &lock) {if (_InterlockedExchange(&lock, 1)) while (lock || _InterlockedExchange(&lock, 1)) _mm_pause();}
 inline void spin_lock_release(volatile long &lock) {_InterlockedExchange(&lock, 0);}
