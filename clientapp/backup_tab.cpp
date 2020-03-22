@@ -979,7 +979,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
             ASSERT(GetDiskFreeSpaceEx((std::wstring(1, L'A' + selected_drive) + L":\\").c_str(), &free_bytes_available_to_caller, NULL, NULL));
             uint64_t total_size = 0;
             for (auto &root_dir_entry : root_dir_entries)
-                total_size += root_dir_entry->size;
+                total_size += root_dir_entry->size - root_dir_entry->size_excluded;
             if (total_size * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
                 MessageBox(dlg_wnd, L"Not enough free disk space", NULL, MB_OK);
                 break;
