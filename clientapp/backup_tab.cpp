@@ -149,9 +149,18 @@ public:
 class RootDirEntry : public DirEntry
 {
 public:
-    std::wstring path;
+    std::wstring path, name;
 
-    RootDirEntry(const std::wstring &path) : path(path) {}
+    RootDirEntry(const std::wstring &path) : path(path)
+    {
+        if (path.back() == L':') {
+            wchar_t label[MAX_PATH+1] = L"\0";
+            GetVolumeInformation((path + L'\\').c_str(), label, _countof(label), NULL, NULL, NULL, NULL, 0);
+            name = path + L" [" + label + L']';
+        }
+        else
+            name = path;
+    }
 };
 std::vector<std::unique_ptr<RootDirEntry>> root_dir_entries;
 class InitRootDirEntries
@@ -360,7 +369,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
 {
     std::vector<DirItem> dirs;
     for (auto &root_dir_entry : root_dir_entries) {
-        DirItem di = {&root_dir_entry->path, &*root_dir_entry, 0};
+        DirItem di = {&root_dir_entry->name, &*root_dir_entry, 0};
         dirs.push_back(di);
         if (root_dir_entry->expanded)
             fill_dirs(dirs, *root_dir_entry, 1);
