@@ -100,6 +100,27 @@ public:
     bool expanded = false;
     //bool deleted = false;
 
+    void exclude_auto(bool set_priority_to_normal = false)
+    {
+        std::function<void(DirEntry&)> set_inherit_from_parent_and_excluded = [&set_inherit_from_parent_and_excluded, set_priority_to_normal](DirEntry &de) {
+            if (set_priority_to_normal)
+                de.priority_auto = DIR_PRIORITY_NORMAL;
+            de.size_excluded = de.size;
+            de.num_of_files_excluded = de.num_of_files;
+            for (auto &&sd : de.subdirs) {
+                sd.second.mode_auto = DirMode::INHERIT_FROM_PARENT;
+                set_inherit_from_parent_and_excluded(sd.second);
+            }
+        };
+
+        mode_auto = DirMode::EXCLUDED;
+        set_inherit_from_parent_and_excluded(*this);
+        for (DirEntry *pde = parent; pde != nullptr; pde = pde->parent) {
+            pde->size_excluded += size;
+            pde->num_of_files_excluded += num_of_files;
+        }
+    }
+
     void set_mode_manual(DirMode new_mode_manual)
     {
         DirMode prev_mode_no_ifp = mode_no_ifp();
@@ -161,6 +182,7 @@ public:
         else
             name = path;
     }
+    RootDirEntry(const std::wstring &path, const std::wstring &name) : path(path), name(name) {}
 };
 std::vector<std::unique_ptr<RootDirEntry>> root_dir_entries;
 class InitRootDirEntries
@@ -170,6 +192,11 @@ public:
     {
         root_dir_entries.push_back(std::make_unique<RootDirEntry>(L"C:"));
         root_dir_entries.back()->expanded = true;
+
+        wchar_t user_profile_dir[MAX_PATH];
+        size_t rsz;
+        _wgetenv_s(&rsz, user_profile_dir, L"USERPROFILE");
+        root_dir_entries.push_back(std::make_unique<RootDirEntry>(user_profile_dir, L"<UserProfile>"));
     }
 } init_root_dir_entries;
 
@@ -196,7 +223,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             continue;
 
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_REPARSE_POINT)) // skip hidden files and directories and symbolic links
-            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && wcscmp(fd.cFileName, L".git") == 0)
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && (wcscmp(fd.cFileName, L".git") == 0 || wcscmp(fd.cFileName, L"AppData") == 0))
                 ASSERT((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
             else
                 continue;
@@ -240,21 +267,8 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
             de.max_last_write_time = sd.second.max_last_write_time;
     }
 
-    std::function<void(DirEntry&)> set_inherit_from_parent_and_excluded = [&set_inherit_from_parent_and_excluded](DirEntry &de) {
-        de.size_excluded = de.size;
-        de.num_of_files_excluded = de.num_of_files;
-        for (auto &&sd : de.subdirs) {
-            sd.second.mode_auto = DirMode::INHERIT_FROM_PARENT;
-            set_inherit_from_parent_and_excluded(sd.second);
-        }
-    };
     if (ends_with(dir_name, L"/.git") && de.size > 100*1024*1024) {
-        de.mode_auto = DirMode::EXCLUDED;
-        set_inherit_from_parent_and_excluded(de);
-        for (DirEntry *pde = de.parent; pde != nullptr; pde = pde->parent) {
-            pde->size_excluded += de.size;
-            pde->num_of_files_excluded += de.num_of_files;
-        }
+        de.exclude_auto();
         return;
     }
 
@@ -322,6 +336,15 @@ DWORD WINAPI initial_scan(LPVOID)
     GetSystemTimeAsFileTime(&cur_ft);
     for (auto &root_dir_entry : root_dir_entries)
         enum_files_recursively(root_dir_entry->path, *root_dir_entry, 1);
+
+    // Exclude ‘<UserProfile>\AppData\Local’ and ‘<UserProfile>\AppData\LocalLow’
+    RootDirEntry &upde = *root_dir_entries[1];
+    ASSERT(upde.name == L"<UserProfile>");
+    auto it = upde.subdirs.find(L"AppData");
+    ASSERT(it != upde.subdirs.end());
+    auto  lit = it->second.subdirs.find(L"Local");    ASSERT( lit != it->second.subdirs.end());  lit->second.exclude_auto(true);
+    auto llit = it->second.subdirs.find(L"LocalLow"); ASSERT(llit != it->second.subdirs.end()); llit->second.exclude_auto(true);
+
     backup_state = BackupState::SCAN_COMPLETED;
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // needed to update backup tab if it is already active
     return 0;
