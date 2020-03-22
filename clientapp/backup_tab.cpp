@@ -4,7 +4,7 @@
 const int DIR_SIZE_COLUMN_WIDTH = mul_by_system_scaling_factor(70);
 const int FILES_COUNT_COLUMN_WIDTH = mul_by_system_scaling_factor(50);
 const int TREEVIEW_LEVEL_OFFSET = mul_by_system_scaling_factor(16);
-const int DIR_MODE_LEVELS_AUTO = 2;
+const int DIR_MODE_LEVELS_AUTO = 3;
 
 TabBackup::SortBy TabBackup::sort_by = SortBy::NAME;
 volatile bool TabBackup::stop_scan = false;
@@ -146,10 +146,27 @@ public:
     }
 };
 
-DirEntry root_dir_entry;
+class RootDirEntry : public DirEntry
+{
+public:
+    std::wstring path;
+
+    RootDirEntry(const std::wstring &path) : path(path) {}
+};
+std::vector<std::unique_ptr<RootDirEntry>> root_dir_entries;
+class InitRootDirEntries
+{
+public:
+    InitRootDirEntries()
+    {
+        root_dir_entries.push_back(std::make_unique<RootDirEntry>(L"C:"));
+        root_dir_entries.back()->expanded = true;
+    }
+} init_root_dir_entries;
+
 FILETIME cur_ft;
 
-void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int level = 0)
+void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int level)
 {
     de.scan_started = true;
 
@@ -294,7 +311,8 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
 DWORD WINAPI initial_scan(LPVOID)
 {
     GetSystemTimeAsFileTime(&cur_ft);
-    enum_files_recursively(L"C:", root_dir_entry);
+    for (auto &root_dir_entry : root_dir_entries)
+        enum_files_recursively(root_dir_entry->path, *root_dir_entry, 1);
     backup_state = BackupState::SCAN_COMPLETED;
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // needed to update backup tab if it is already active
     return 0;
@@ -307,7 +325,7 @@ struct DirItem
     int level;
 };
 
-void fill_dirs(std::vector<DirItem> &all_dirs, DirEntry &d, int level = 0)
+void fill_dirs(std::vector<DirItem> &all_dirs, DirEntry &d, int level)
 {
     std::vector<DirItem> dirs;
     d.subdirs_lock.acquire();
@@ -341,7 +359,12 @@ int treeview_hover_dir_item_index;
 void TabBackup::treeview_paint(HDC hdc, int width, int height)
 {
     std::vector<DirItem> dirs;
-    fill_dirs(dirs, root_dir_entry);
+    for (auto &root_dir_entry : root_dir_entries) {
+        DirItem di = {&root_dir_entry->path, &*root_dir_entry, 0};
+        dirs.push_back(di);
+        if (root_dir_entry->expanded)
+            fill_dirs(dirs, *root_dir_entry, 1);
+    }
 
     int new_smax = dirs.size()*LINE_HEIGHT + TREEVIEW_PADDING*2 - 2; // without `- 2` there are artifacts at the bottom of tree view after scrolling to end and scrollbar up button pressed
     int smin, smax;
@@ -675,10 +698,11 @@ class MonitoredDir
     HANDLE read_directory_changes_thread;
 
 public:
+    int root_dir_entry_index;
     std::wstring dir_name;
     bool stop = false;
 
-    MonitoredDir(const std::wstring &dir_name) : dir_name(dir_name)
+    MonitoredDir(int root_dir_entry_index, const std::wstring &dir_name) : root_dir_entry_index(root_dir_entry_index), dir_name(dir_name)
     {
         DWORD WINAPI read_directory_changes_thread_proc(LPVOID md);
         read_directory_changes_thread = CreateThread(NULL, 0, read_directory_changes_thread_proc, this, 0, NULL);
@@ -700,6 +724,8 @@ void stop_monitoring()
 
 struct DirChange
 {
+    int root_dir_entry_index; // corresponding root_dir_entry can be found by `dir_name`, of course, but storing this index is simpler [and faster]
+    std::wstring dir_name;
     enum class Operation
     {
         CREATE,
@@ -716,7 +742,7 @@ struct DirChange
 std::list<DirChange> dir_changes;
 SpinLock dir_changes_lock;
 
-void add_dir_change(DirChange::Operation operation, const std::wstring &fname, const std::wstring &new_fname = std::wstring())
+void add_dir_change(MonitoredDir *md, DirChange::Operation operation, const std::wstring &fname, const std::wstring &new_fname = std::wstring())
 {
     DirChange dc;
     dc.time = timeGetTime();
@@ -724,10 +750,12 @@ void add_dir_change(DirChange::Operation operation, const std::wstring &fname, c
     dir_changes_lock.acquire();
     if (operation == DirChange::Operation::MODIFY)
         for (auto &&d : dir_changes)
-            if (d.operation == DirChange::Operation::MODIFY && d.fname == fname) {
+            if (d.operation == DirChange::Operation::MODIFY && d.fname == fname && d.root_dir_entry_index == md->root_dir_entry_index && d.dir_name == md->dir_name) {
                 d.time = dc.time; // just update time
                 goto skip_add;
             }
+    dc.root_dir_entry_index = md->root_dir_entry_index;
+    dc.dir_name = md->dir_name;
     dc.operation = operation;
     dc.fname = fname;
     dc.new_fname = new_fname;
@@ -736,9 +764,10 @@ skip_add:
     dir_changes_lock.release();
 }
 
-DWORD WINAPI read_directory_changes_thread_proc(LPVOID md)
+DWORD WINAPI read_directory_changes_thread_proc(LPVOID md_)
 {
-    HANDLE dir_handle = CreateFileW((((MonitoredDir*)md)->dir_name + L'\\').c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED|FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    MonitoredDir *md = (MonitoredDir*)md_;
+    HANDLE dir_handle = CreateFileW((md->dir_name + L'\\').c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED|FILE_FLAG_BACKUP_SEMANTICS, NULL);
     ASSERT(dir_handle != INVALID_HANDLE_VALUE);
 
     OVERLAPPED opd;
@@ -758,14 +787,14 @@ DWORD WINAPI read_directory_changes_thread_proc(LPVOID md)
                 FILE_NOTIFY_INFORMATION *fni = (FILE_NOTIFY_INFORMATION*)fni_buf, *next_fni;
                 if (!just_removed_file_name.empty()) {
                     if (fni->Action == FILE_ACTION_ADDED && path_base_name(just_removed_file_name) == path_base_name(std::wstring(fni->FileName, fni->FileNameLength/sizeof(WCHAR)))) {
-                        add_dir_change(DirChange::Operation::MOVE, just_removed_file_name, std::wstring(fni->FileName, fni->FileNameLength/sizeof(WCHAR)));
+                        add_dir_change(md, DirChange::Operation::MOVE, just_removed_file_name, std::wstring(fni->FileName, fni->FileNameLength/sizeof(WCHAR)));
                         just_removed_file_name.clear();
                         if (fni->NextEntryOffset == 0)
                             break;
                         fni = (FILE_NOTIFY_INFORMATION*)((char*)fni + fni->NextEntryOffset);
                     }
                     else {
-                        add_dir_change(DirChange::Operation::DELETE, just_removed_file_name);
+                        add_dir_change(md, DirChange::Operation::DELETE, just_removed_file_name);
                         just_removed_file_name.clear();
                     }
                 }
@@ -782,14 +811,14 @@ DWORD WINAPI read_directory_changes_thread_proc(LPVOID md)
                         break;
                     case FILE_ACTION_REMOVED:
                         if (next_fni->Action == FILE_ACTION_ADDED && path_base_name(fname) == path_base_name(std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)))) {
-                            add_dir_change(DirChange::Operation::MOVE, fname, std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)));
+                            add_dir_change(md, DirChange::Operation::MOVE, fname, std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)));
                             fni = next_fni;
                             next_fni = (FILE_NOTIFY_INFORMATION*)((char*)fni + fni->NextEntryOffset);
                             goto continue_;
                         }
                         else {
                             if (!just_removed_file_name.empty()) {
-                                add_dir_change(DirChange::Operation::DELETE, just_removed_file_name);
+                                add_dir_change(md, DirChange::Operation::DELETE, just_removed_file_name);
                                 //just_removed_file_name.clear();
                             }
                             just_removed_file_name = fname;
@@ -803,7 +832,7 @@ DWORD WINAPI read_directory_changes_thread_proc(LPVOID md)
                         break;
                     case FILE_ACTION_RENAMED_OLD_NAME:
                         if (next_fni->Action == FILE_ACTION_RENAMED_NEW_NAME) {
-                            add_dir_change(DirChange::Operation::RENAME, fname, std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)));
+                            add_dir_change(md, DirChange::Operation::RENAME, fname, std::wstring(next_fni->FileName, next_fni->FileNameLength/sizeof(WCHAR)));
                             fni = next_fni;
                             next_fni = (FILE_NOTIFY_INFORMATION*)((char*)fni + fni->NextEntryOffset);
                             goto continue_;
@@ -815,17 +844,17 @@ DWORD WINAPI read_directory_changes_thread_proc(LPVOID md)
                         ERROR;
                         break;
                     }
-                    add_dir_change(operation, fname);
+                    add_dir_change(md, operation, fname);
 continue_:
                     if (fni->NextEntryOffset == 0) break;
                 }
                 break;
             } else {
                 if (!just_removed_file_name.empty()) {
-                    add_dir_change(DirChange::Operation::DELETE, just_removed_file_name);
+                    add_dir_change(md, DirChange::Operation::DELETE, just_removed_file_name);
                     just_removed_file_name.clear();
                 }
-                if (((MonitoredDir*)md)->stop)
+                if (md->stop)
                     goto break_;
                 Sleep(100);
             }
@@ -873,7 +902,7 @@ DWORD WINAPI apply_directory_changes_thread_proc(LPVOID md)
     return 0;
 }
 
-void collect_monitored_dirs(const std::wstring &dir_name, DirEntry &de)
+void collect_monitored_dirs(int rdei, const std::wstring &dir_name, DirEntry &de)
 {
     DirMode mode = de.mode_no_ifp();
     ASSERT(mode != DirMode::INHERIT_FROM_PARENT);
@@ -881,10 +910,10 @@ void collect_monitored_dirs(const std::wstring &dir_name, DirEntry &de)
     if (mode == DirMode::EXCLUDED) {
         if (de.mode_mixed) // may be there are some non-excluded subdirectories
             for (auto &&sd : de.subdirs)
-                collect_monitored_dirs(dir_name / sd.first, sd.second);
+                collect_monitored_dirs(rdei, dir_name / sd.first, sd.second);
     }
     else
-        monitored_dirs.push_back(std::make_unique<MonitoredDir>(dir_name));
+        monitored_dirs.push_back(std::make_unique<MonitoredDir>(rdei, dir_name));
 }
 
 INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPARAM wparam, LPARAM lparam)
@@ -948,14 +977,18 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
             int selected_drive = ListBox_GetItemData(drives_list, ListBox_GetCurSel(drives_list));
             ULARGE_INTEGER free_bytes_available_to_caller;
             ASSERT(GetDiskFreeSpaceEx((std::wstring(1, L'A' + selected_drive) + L":\\").c_str(), &free_bytes_available_to_caller, NULL, NULL));
-            if (uint64_t(root_dir_entry.size) * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
+            uint64_t total_size = 0;
+            for (auto &root_dir_entry : root_dir_entries)
+                total_size += root_dir_entry->size;
+            if (total_size * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
                 MessageBox(dlg_wnd, L"Not enough free disk space", NULL, MB_OK);
                 break;
             }
 
             local_backup_drive = 'A' + selected_drive;
             backup_state = BackupState::BACKUP_STARTED;
-            collect_monitored_dirs(L"C:", root_dir_entry);
+            for (size_t i=0; i<root_dir_entries.size(); i++)
+                collect_monitored_dirs(i, root_dir_entries[i]->path, *root_dir_entries[i]);
             apply_directory_changes_thread = CreateThread(NULL, 0, apply_directory_changes_thread_proc, NULL, 0, NULL);
             SendMessage(main_wnd, WM_COMMAND, IDB_TAB_PROGRESS, 0); }
         case IDCANCEL:
