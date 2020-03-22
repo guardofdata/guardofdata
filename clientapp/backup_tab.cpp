@@ -100,10 +100,23 @@ public:
     bool expanded = false;
     //bool deleted = false;
 
-    void exclude_auto(bool set_priority_to_normal = false)
+    void update_mode_mixed()
     {
-        std::function<void(DirEntry&)> set_inherit_from_parent_and_excluded = [&set_inherit_from_parent_and_excluded, set_priority_to_normal](DirEntry &de) {
-            if (set_priority_to_normal)
+        for (DirEntry *pd = parent; pd; pd = pd->parent) {
+            pd->mode_mixed = false;
+            DirMode pd_mode_no_ifp = pd->mode_no_ifp();
+            for (auto &&sd : pd->subdirs)
+                if ((sd.second.mode() != pd_mode_no_ifp && sd.second.mode() != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
+                    pd->mode_mixed = true;
+                    break;
+                }
+        }
+    }
+
+    void exclude_auto(bool set_priority_to_normal_and_update_mode_mixed = false)
+    {
+        std::function<void(DirEntry&)> set_inherit_from_parent_and_excluded = [&set_inherit_from_parent_and_excluded, set_priority_to_normal_and_update_mode_mixed](DirEntry &de) {
+            if (set_priority_to_normal_and_update_mode_mixed)
                 de.priority_auto = DIR_PRIORITY_NORMAL;
             de.size_excluded = de.size;
             de.num_of_files_excluded = de.num_of_files;
@@ -119,6 +132,9 @@ public:
             pde->size_excluded += size;
             pde->num_of_files_excluded += num_of_files;
         }
+
+        if (set_priority_to_normal_and_update_mode_mixed)
+            update_mode_mixed();
     }
 
     void set_mode_manual(DirMode new_mode_manual)
@@ -127,15 +143,7 @@ public:
         mode_manual = new_mode_manual;
 
         // Update `mode_mixed`
-        for (DirEntry *pd = parent; pd; pd = pd->parent) {
-            pd->mode_mixed = false;
-            DirMode pd_mode_no_ifp = pd->mode_no_ifp();
-            for (auto &&sd : pd->subdirs)
-                if ((sd.second.mode() != pd_mode_no_ifp && sd.second.mode() != DirMode::INHERIT_FROM_PARENT) || sd.second.mode_mixed) {
-                    pd->mode_mixed = true;
-                    break;
-                }
-        }
+        update_mode_mixed();
 
         // Update `num_of_files_excluded` and `size_excluded` if necessary
         if ((prev_mode_no_ifp == DirMode::EXCLUDED) != (mode_no_ifp() == DirMode::EXCLUDED)) {
