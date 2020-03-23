@@ -289,8 +289,9 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         if (last_slash_pos != dir_name.npos) {
             std::wstring base_name(dir_name.c_str() + last_slash_pos + 1);
             fast_make_lowercase_en(&base_name[0]);
-            if (base_name.find(L"photo") != base_name.npos) {
+            if (base_name.find(L"photo") != base_name.npos || base_name.find(L"backup") != base_name.npos) {
                 de.mode_auto = DirMode::APPEND_ONLY;
+                de.priority_auto = DIR_PRIORITY_LOW;
                 std::function<void(DirEntry&)> set_inherit_from_parent = [&set_inherit_from_parent](DirEntry &de) {
                     for (auto &&sd : de.subdirs) {
                         sd.second.mode_auto = DirMode::INHERIT_FROM_PARENT;
@@ -1018,7 +1019,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
             ULARGE_INTEGER free_bytes_available_to_caller;
             ASSERT(GetDiskFreeSpaceEx((std::wstring(1, L'A' + selected_drive) + L":\\").c_str(), &free_bytes_available_to_caller, NULL, NULL));
             uint64_t total_size = 0;
-            for (auto &root_dir_entry : root_dir_entries)
+            for (const auto &root_dir_entry : root_dir_entries)
                 total_size += root_dir_entry->size - root_dir_entry->size_excluded;
             if (total_size * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
                 MessageBox(dlg_wnd, L"Not enough free disk space", NULL, MB_OK);
