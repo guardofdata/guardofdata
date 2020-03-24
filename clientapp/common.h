@@ -142,3 +142,22 @@ inline std::wstring int64_to_str(int64_t i)
     _i64tow_s(i, s, _countof(s), 10);
     return std::wstring(s);
 }
+
+template <typename Ty> inline std::string separate_thousands(Ty value)
+{
+    static std::stringstream ss;
+    static bool initialized = false;
+    if (!initialized) {
+        struct Dotted : std::numpunct<char> // [https://stackoverflow.com/a/31656618/2692494 <- google:‘c++ separate thousands’]
+        {
+            char do_thousands_sep()   const {return ' ';}  // separate with spaces
+            std::string do_grouping() const {return "\3";} // groups of 3 digits
+        };
+        ss.imbue(std::locale(ss.getloc(), new Dotted));
+        ss << std::fixed << std::setprecision(1); // [https://stackoverflow.com/a/14432416/2692494 <- google:‘c++ cout format float digits’]
+        initialized = true;
+    }
+    ss.str(std::string()); // [https://stackoverflow.com/a/20792/2692494 <- google:‘stringstream clear’] (`clear()` just clears state of the stream)
+    ss << value;
+    return ss.str();
+}

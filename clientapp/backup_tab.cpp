@@ -2,7 +2,7 @@
 #include "tabs.h"
 
 const int DIR_SIZE_COLUMN_WIDTH = mul_by_system_scaling_factor(70);
-const int FILES_COUNT_COLUMN_WIDTH = mul_by_system_scaling_factor(50);
+const int FILES_COUNT_COLUMN_WIDTH = mul_by_system_scaling_factor(52);
 const int TREEVIEW_LEVEL_OFFSET = mul_by_system_scaling_factor(16);
 const int DIR_MODE_LEVELS_AUTO = 3;
 
@@ -467,19 +467,19 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
             r.left = r.right - DIR_SIZE_COLUMN_WIDTH;
             if (d.d->scan_started) {
                 const int MB = 1024 * 1024;
-                char s[32];
+                //char s[32];
                 //sprintf_s(s, d.second->size >= 100*MB ? "%.0f" : d.second->size >= 10*MB ? "%.1f" : d.second->size >= MB ? "%.2f" : "%.3f", d.second->size / double(MB));
-                sprintf_s(s, "%.1f", (d.d->num_of_files_excluded == d.d->num_of_files ? d.d->size_excluded : d.d->size - d.d->size_excluded) / double(MB));
+                double size_of_files_in_mb = (d.d->num_of_files_excluded == d.d->num_of_files ? d.d->size_excluded : d.d->size - d.d->size_excluded) / double(MB);
                 //sprintf_s(s, "%.1f", ((int64_t&)cur_ft - (int64_t&)d.d->max_last_write_time)/(10000000.0*3600*24));
                 COLORREF prev_text_color;
                 if (d.d->num_of_files_excluded > 0)
                     prev_text_color = SetTextColor(hdc, d.d->num_of_files_excluded == d.d->num_of_files ? RGB(192, 0, 0) : RGB(192, 192, 0));
-                DrawTextA(hdc, s, -1, &r, DT_RIGHT);
+                DrawTextA(hdc, separate_thousands(size_of_files_in_mb).c_str(), -1, &r, DT_RIGHT);
 
                 r.right = r.left;
                 r.left -= FILES_COUNT_COLUMN_WIDTH;
-                _itoa_s(d.d->num_of_files_excluded == d.d->num_of_files ? d.d->num_of_files_excluded : d.d->num_of_files - d.d->num_of_files_excluded, s, 10);
-                DrawTextA(hdc, s, -1, &r, DT_RIGHT);
+                int num_of_files = d.d->num_of_files_excluded == d.d->num_of_files ? d.d->num_of_files_excluded : d.d->num_of_files - d.d->num_of_files_excluded;
+                DrawTextA(hdc, separate_thousands(num_of_files).c_str(), -1, &r, DT_RIGHT);
                 if (d.d->num_of_files_excluded > 0)
                     SetTextColor(hdc, prev_text_color);
             }
@@ -543,15 +543,12 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
         r.bottom = r.top + FONT_HEIGHT;
         r.right = width - TREEVIEW_PADDING - LINE_PADDING_RIGHT;
         r.left = r.right - DIR_SIZE_COLUMN_WIDTH;
-        char s[32];
-        sprintf_s(s, "%.1f", treeview_hover_dir_item.d->size_excluded / double(1024*1024));
         SetTextColor(hdc, RGB(192, 0, 0));
-        DrawTextA(hdc, s, -1, &r, DT_RIGHT);
+        DrawTextA(hdc, separate_thousands(treeview_hover_dir_item.d->size_excluded / double(1024*1024)).c_str(), -1, &r, DT_RIGHT);
 
         r.right = r.left;
         r.left -= FILES_COUNT_COLUMN_WIDTH;
-        _itoa_s(treeview_hover_dir_item.d->num_of_files_excluded, s, 10);
-        DrawTextA(hdc, s, -1, &r, DT_RIGHT);
+        DrawTextA(hdc, separate_thousands(treeview_hover_dir_item.d->num_of_files_excluded).c_str(), -1, &r, DT_RIGHT);
     }
 }
 
