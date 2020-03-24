@@ -345,6 +345,8 @@ DWORD WINAPI initial_scan(LPVOID)
     GetSystemTimeAsFileTime(&cur_ft);
     for (auto &root_dir_entry : root_dir_entries)
         enum_files_recursively(root_dir_entry->path, *root_dir_entry, 1);
+    if (TabBackup::stop_scan)
+        return 1;
 
     // Exclude ‘<UserProfile>\AppData\Local’ and ‘<UserProfile>\AppData\LocalLow’
     RootDirEntry &upde = *root_dir_entries[1];
