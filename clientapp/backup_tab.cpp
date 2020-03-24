@@ -791,12 +791,20 @@ void add_dir_change(MonitoredDir *md, DirChange::Operation operation, const std:
     dc.time = timeGetTime();
 
     dir_changes_lock.acquire();
-    if (operation == DirChange::Operation::MODIFY)
+    if (operation == DirChange::Operation::MODIFY) {
         for (auto &&d : dir_changes)
-            if (d.operation == DirChange::Operation::MODIFY && d.fname == fname && d.root_dir_entry_index == md->root_dir_entry_index && d.dir_name == md->dir_name) {
+            if ((d.operation == DirChange::Operation::MODIFY || d.operation == DirChange::Operation::CREATE) && d.fname == fname && d.root_dir_entry_index == md->root_dir_entry_index && d.dir_name == md->dir_name) {
                 d.time = dc.time; // just update time
                 goto skip_add;
             }
+    }
+    else if (operation == DirChange::Operation::DELETE) {
+        for (auto it = dir_changes.begin(); it != dir_changes.end(); it++)
+            if (it->operation == DirChange::Operation::CREATE && it->fname == fname && it->root_dir_entry_index == md->root_dir_entry_index && it->dir_name == md->dir_name) {
+                dir_changes.erase(it);
+                goto skip_add;
+            }
+    }
     dc.root_dir_entry_index = md->root_dir_entry_index;
     dc.dir_name = md->dir_name;
     dc.operation = operation;
@@ -919,7 +927,7 @@ DWORD WINAPI apply_directory_changes_thread_proc(LPVOID md)
 
         dir_changes_lock.acquire();
         for (auto it = dir_changes.begin(); it != dir_changes.end();) {
-            if (it->operation == DirChange::Operation::MODIFY && time - it->time < 1000) {
+            if ((it->operation == DirChange::Operation::MODIFY || it->operation == DirChange::Operation::CREATE) && time - it->time < 1000) {
                 ++it;
                 continue;
             }
