@@ -343,10 +343,11 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
 DWORD WINAPI initial_scan(LPVOID)
 {
     GetSystemTimeAsFileTime(&cur_ft);
-    for (auto &root_dir_entry : root_dir_entries)
+    for (auto &root_dir_entry : root_dir_entries) {
         enum_files_recursively(root_dir_entry->path, *root_dir_entry, 1);
-    if (TabBackup::stop_scan)
-        return 1;
+        if (TabBackup::stop_scan)
+            return 1;
+    }
 
     // Exclude ‘<UserProfile>\AppData\Local’ and ‘<UserProfile>\AppData\LocalLow’
     RootDirEntry &upde = *root_dir_entries[1];
@@ -358,6 +359,8 @@ DWORD WINAPI initial_scan(LPVOID)
 
     backup_state = BackupState::SCAN_COMPLETED;
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // needed to update backup tab if it is already active
+
+    MessageBox(main_wnd, L"Scan completed. Please configure guarded folders and/or exclude unnecessary ones, and then click ‘Start backup!’ button", L"", MB_OK|MB_ICONINFORMATION);
     return 0;
 }
 
@@ -1014,7 +1017,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
         case IDOK: {
             HWND drives_list = GetDlgItem(dlg_wnd, IDC_DRIVES_LIST);
             if (ListBox_GetCurSel(drives_list) == LB_ERR) {
-                MessageBox(dlg_wnd, L"Please select a drive for storing local backup", NULL, MB_OK);
+                MessageBox(dlg_wnd, L"Please select a drive for storing local backup", NULL, MB_OK|MB_ICONEXCLAMATION);
                 break;
             }
             int selected_drive = ListBox_GetItemData(drives_list, ListBox_GetCurSel(drives_list));
@@ -1024,7 +1027,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
             for (const auto &root_dir_entry : root_dir_entries)
                 total_size += root_dir_entry->size - root_dir_entry->size_excluded;
             if (total_size * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
-                MessageBox(dlg_wnd, L"Not enough free disk space", NULL, MB_OK);
+                MessageBox(dlg_wnd, (L"There is not enough free space on drive " + std::wstring(1, L'A' + selected_drive) + L".\nPlease select another drive.").c_str(), NULL, MB_OK|MB_ICONSTOP);
                 break;
             }
 

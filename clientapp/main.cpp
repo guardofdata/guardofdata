@@ -19,14 +19,14 @@ void error_fn(const char *file, int line)
 {
     char s[300];
     sprintf_s(s, "Error at file %s (%i)", file, line);
-    MessageBoxA(main_wnd, s, NULL, MB_OK);
+    MessageBoxA(IsWindow(main_wnd) ? main_wnd : NULL, s, NULL, MB_OK);
 }
 
 void assertion_failed(const char *file, int line)
 {
     char s[300];
     sprintf_s(s, "Assertion failed!\nFile: %s\nLine: %i", file, line);
-    MessageBoxA(main_wnd, s, NULL, MB_OK);
+    MessageBoxA(IsWindow(main_wnd) ? main_wnd : NULL, s, NULL, MB_OK);
 }
 
 struct TV_SB_WndRects
