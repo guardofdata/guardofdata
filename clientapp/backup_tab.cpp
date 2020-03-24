@@ -869,7 +869,7 @@ DWORD WINAPI read_directory_changes_thread_proc(LPVOID md_)
                         }
                         break;
                     case FILE_ACTION_MODIFIED:
-                        if (GetFileAttributes(fname.c_str()) & FILE_ATTRIBUTE_DIRECTORY) // skip this action because there are excess modify directory notifications
+                        if (GetFileAttributes((md->dir_name / fname).c_str()) & FILE_ATTRIBUTE_DIRECTORY) // skip this action because there are excess modify directory notifications
                             goto continue_;
                         operation = DirChange::Operation::MODIFY;
                         break;
