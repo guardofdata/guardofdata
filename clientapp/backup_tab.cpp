@@ -353,9 +353,10 @@ DWORD WINAPI initial_scan(LPVOID)
     RootDirEntry &upde = *root_dir_entries[1];
     ASSERT(upde.name == L"<UserProfile>");
     auto it = upde.subdirs.find(L"AppData");
-    ASSERT(it != upde.subdirs.end());
-    auto  lit = it->second.subdirs.find(L"Local");    ASSERT( lit != it->second.subdirs.end());  lit->second.exclude_auto(true);
-    auto llit = it->second.subdirs.find(L"LocalLow"); ASSERT(llit != it->second.subdirs.end()); llit->second.exclude_auto(true);
+    if (it != upde.subdirs.end()) { // for Windows XP
+        auto  lit = it->second.subdirs.find(L"Local");    if ( lit != it->second.subdirs.end())  lit->second.exclude_auto(true);
+        auto llit = it->second.subdirs.find(L"LocalLow"); if (llit != it->second.subdirs.end()) llit->second.exclude_auto(true);
+    }
 
     backup_state = BackupState::SCAN_COMPLETED;
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // needed to update backup tab if it is already active
@@ -927,7 +928,7 @@ DWORD WINAPI apply_directory_changes_thread_proc(LPVOID md)
 
         dir_changes_lock.acquire();
         for (auto it = dir_changes.begin(); it != dir_changes.end();) {
-            if ((it->operation == DirChange::Operation::MODIFY || it->operation == DirChange::Operation::CREATE) && time - it->time < 1000) {
+            if ((it->operation == DirChange::Operation::MODIFY || it->operation == DirChange::Operation::CREATE) && time - it->time < 500) {
                 ++it;
                 continue;
             }
