@@ -788,6 +788,9 @@ SpinLock dir_changes_lock;
 
 void add_dir_change(MonitoredDir *md, DirChange::Operation operation, const std::wstring &fname, const std::wstring &new_fname = std::wstring())
 {
+    if (operation == DirChange::Operation::MOVE && fname == new_fname)
+        return;
+
     DirChange dc;
     dc.time = timeGetTime();
 
@@ -859,6 +862,11 @@ DWORD WINAPI read_directory_changes_thread_proc(LPVOID md_)
                     switch (fni->Action)
                     {
                     case FILE_ACTION_ADDED:
+                        if (!just_removed_file_name.empty() && path_base_name(just_removed_file_name) == path_base_name(fname)) {
+                            add_dir_change(md, DirChange::Operation::MOVE, just_removed_file_name, fname);
+                            just_removed_file_name.clear();
+                            goto continue_;
+                        }
                         operation = DirChange::Operation::CREATE;
                         break;
                     case FILE_ACTION_REMOVED:
