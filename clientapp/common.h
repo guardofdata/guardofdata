@@ -161,3 +161,14 @@ template <typename Ty> inline std::string separate_thousands(Ty value)
     ss << value;
     return ss.str();
 }
+
+inline std::wstring replace_all(const std::wstring &str, const std::wstring &old, const std::wstring &n)
+{
+    std::wstring s(str);
+    size_t start_pos = 0;
+    while ((start_pos = s.find(old, start_pos)) != s.npos) {
+        s.replace(start_pos, old.length(), n);
+        start_pos += n.length();
+    }
+    return s;
+}

@@ -1016,7 +1016,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
                 GetVolumeInformation((drive_letter_str + L":\\").c_str(), label, _countof(label), NULL, NULL, NULL, NULL, 0);
                 ListBox_SetItemData(drives_list, ListBox_AddString(drives_list, (
                     drive_letter_str + (label[0] ? std::wstring(L" [") + label + L"]" : L"") + L" ("
-                    + int64_to_str(free_bytes_available_to_caller.QuadPart / (1024*1024*1024)) + L" GB free)").c_str()), i);
+                    + int64_to_str(free_bytes_available_to_caller.QuadPart / (1024*1024*1024)) + L" GiB free)").c_str()), i);
             }
 
         buttons.push_back(std::make_unique<Button>(dlg_wnd, IDOK));
@@ -1044,7 +1044,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
             for (const auto &root_dir_entry : root_dir_entries)
                 total_size += root_dir_entry->size - root_dir_entry->size_excluded;
             if (total_size * 125 / 100 > free_bytes_available_to_caller.QuadPart) {
-                MessageBox(dlg_wnd, (L"There is not enough free space on drive " + std::wstring(1, L'A' + selected_drive) + L".\nPlease select another drive.").c_str(), NULL, MB_OK|MB_ICONSTOP);
+                MessageBox(dlg_wnd, replace_all(L"There is not enough free space on drive <drive_letter>.\nPlease select another drive.", L"<drive_letter>", std::wstring(1, L'A' + selected_drive)).c_str(), NULL, MB_OK|MB_ICONSTOP);
                 break;
             }
 
