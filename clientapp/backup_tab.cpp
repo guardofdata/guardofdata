@@ -185,7 +185,10 @@ public:
         if (path.back() == L':') {
             wchar_t label[MAX_PATH+1] = L"\0";
             GetVolumeInformation((path + L'\\').c_str(), label, _countof(label), NULL, NULL, NULL, NULL, 0);
-            name = path + L" [" + label + L']';
+            if (label[0] != L'\0')
+                name = path + L" [" + label + L']';
+            else
+                name = path;
         }
         else
             name = path;
@@ -1012,7 +1015,7 @@ INT_PTR CALLBACK backup_drive_selection_dlg_proc(HWND dlg_wnd, UINT message, WPA
                 wchar_t label[MAX_PATH+1] = L"\0";
                 GetVolumeInformation((drive_letter_str + L":\\").c_str(), label, _countof(label), NULL, NULL, NULL, NULL, 0);
                 ListBox_SetItemData(drives_list, ListBox_AddString(drives_list, (
-                    drive_letter_str + L" [" + label + L"] ("
+                    drive_letter_str + (label[0] ? std::wstring(L" [") + label + L"]" : L"") + L" ("
                     + int64_to_str(free_bytes_available_to_caller.QuadPart / (1024*1024*1024)) + L" GB free)").c_str()), i);
             }
 
