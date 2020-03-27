@@ -1,0 +1,3 @@
+When running Guard of Data on Windows XP before this change there are 2 events (debug strings) generated when saving new file in Notepad:
+MOVE new.txt -> new.txt
+CREATE new.txt
