@@ -13,4 +13,4 @@ MODIFIED Release\new.txt
 MODIFIED Release\new.txt
 REMOVED Release\new.txt
 ```
-(This is important because if new.txt file is not in sub directory, then skipped actions are not generated.)
+(This is important because if new.txt file is not in sub directory, then there are no skipped actions.)
