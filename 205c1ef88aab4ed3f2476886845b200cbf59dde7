@@ -1,3 +1,16 @@
 When running Guard of Data on Windows XP before this change there are 2 events (debug strings) generated when saving new file in Notepad:
 MOVE new.txt -> new.txt
 CREATE new.txt
+
+
+After ‘After that ReadDirectoryChangesTest outputted:’ there should be:
+```
+--------------
+ADDED Release\new.txt
+--------------
+ADDED Release\new.txt
+MODIFIED Release\new.txt
+MODIFIED Release\new.txt
+REMOVED Release\new.txt
+```
+(This is important because if new.txt file is not in sub directory, then skipped actions are not generated.)
