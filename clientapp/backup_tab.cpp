@@ -49,6 +49,14 @@ class DirEntry
 {
 public:
     DirEntry *parent = nullptr;
+    const std::wstring *dir_name = nullptr;
+    std::wstring full_dir_name() const
+    {
+        std::wstring full_dir_name = *dir_name;
+        for (DirEntry *p = parent; p; p = p->parent)
+            full_dir_name = *p->dir_name / full_dir_name;
+        return full_dir_name;
+    }
     struct Less
     {
         wchar_t fast_get_lowercase_en(wchar_t c) const
@@ -99,6 +107,7 @@ public:
     bool scan_started = false;
     bool expanded = false;
     //bool deleted = false;
+    bool not_traversed = false; // directory entry was not scanned
 
     void update_mode_mixed()
     {
@@ -192,8 +201,9 @@ public:
         }
         else
             name = path;
+        dir_name = &this->path;
     }
-    RootDirEntry(const std::wstring &path, const std::wstring &name) : path(path), name(name) {}
+    RootDirEntry(const std::wstring &path, const std::wstring &name) : path(path), name(name) {dir_name = &this->path;}
 };
 std::vector<std::unique_ptr<RootDirEntry>> root_dir_entries;
 class InitRootDirEntries
@@ -245,7 +255,10 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
                 continue;
             if (!de.parent && always_excluded_directories.find(file_name) != always_excluded_directories.end())
                 continue;
-            subdirs[file_name].parent = &de;
+
+            auto it = subdirs.emplace(file_name, DirEntry());
+            it.first->second.parent = &de;
+            it.first->second.dir_name = &it.first->first;
         }
         else {
             de.dir_files_size += (uint64_t(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
@@ -502,7 +515,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
 
             r.right = r.left;
             r.left = TREEVIEW_PADDING + d.level * TREEVIEW_LEVEL_OFFSET;
-            if (!d.d->subdirs.empty())
+            if (!d.d->subdirs.empty() || d.d->not_traversed)
                 DrawIconEx(hdc, r.left, r.top, d.d->expanded ? icon_dir_exp : icon_dir_col, ICON_SIZE, ICON_SIZE, 0, NULL, DI_NORMAL);
 
             r.left += ICON_SIZE;
@@ -573,6 +586,40 @@ void TabBackup::treeview_lbdown()
         return;
 
     treeview_hover_dir_item.d->expanded = !treeview_hover_dir_item.d->expanded;
+    if (treeview_hover_dir_item.d->not_traversed) {
+        treeview_hover_dir_item.d->not_traversed = false;
+
+        WIN32_FIND_DATA fd;
+        HANDLE h = FindFirstFile((treeview_hover_dir_item.d->full_dir_name() / L"*.*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) return;
+
+        do
+        {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM)
+                continue;
+
+            if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_REPARSE_POINT)) // skip hidden files and directories and symbolic links
+                if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && (wcscmp(fd.cFileName, L".git") == 0 || wcscmp(fd.cFileName, L"AppData") == 0))
+                    ASSERT((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
+                else
+                    continue;
+
+            std::wstring file_name(fd.cFileName);
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (file_name == L"." || file_name == L"..")
+                    continue;
+                if (!treeview_hover_dir_item.d->parent && always_excluded_directories.find(file_name) != always_excluded_directories.end())
+                    continue;
+
+                auto it = treeview_hover_dir_item.d->subdirs.emplace(file_name, DirEntry());
+                it.first->second.parent = treeview_hover_dir_item.d;
+                it.first->second.dir_name = &it.first->first;
+                it.first->second.not_traversed = true;
+            }
+        } while (FindNextFile(h, &fd));
+
+        FindClose(h);
+    }
     InvalidateRect(treeview_wnd, NULL, FALSE);
 }
 
@@ -762,6 +809,7 @@ void cancel_scan()
     for (auto &root_dir_entry : root_dir_entries) {
         root_dir_entry = std::make_unique<RootDirEntry>(root_dir_entry->path, root_dir_entry->name);
         root_dir_entry->mode_auto = DirMode::EXCLUDED;
+        root_dir_entry->not_traversed = true;
     }
     treeview_hover_dir_item.d = nullptr;
     backup_treeview_cs.leave();
@@ -772,12 +820,12 @@ void cancel_scan()
 
 void restart_scan()
 {
-    backup_treeview_cs.enter();
+    //backup_treeview_cs.enter(); // this is not necessary because `restart_scan()` is called in the same thread as `treeview_paint()`
     for (auto &root_dir_entry : root_dir_entries)
         root_dir_entry = std::make_unique<RootDirEntry>(root_dir_entry->path, root_dir_entry->name);
     root_dir_entries[0]->expanded = true;
     treeview_hover_dir_item.d = nullptr;
-    backup_treeview_cs.leave();
+    //backup_treeview_cs.leave();
 
     TabBackup::stop_scan = false;
     TabBackup::cancel_scan = false;
