@@ -28,17 +28,17 @@ extern std::unique_ptr<Tab> current_tab;
 class TabBackup : public Tab
 {
     Button filter;
-    std::unique_ptr<Button> cancel_scan, restart_scan, start_backup;
+    std::unique_ptr<Button> cancel_scan_button, restart_scan, start_backup;
 
 public:
     static enum class SortBy {NAME, SIZE, COUNT} sort_by;
-    static volatile bool stop_scan;
+    static volatile bool stop_scan, cancel_scan;
 
     TabBackup() :
         filter(IDB_FILTER, L"Filter", 10, 60, 100, 30)
     {
         if (backup_state == BackupState::SCAN_STARTED)
-            cancel_scan = std::make_unique<Button>(IDB_CANCEL_SCAN, L"Cancel scan. I want to configure all guarded folders manually", 120, 60, 400, 30);
+            cancel_scan_button = std::make_unique<Button>(IDB_CANCEL_SCAN, L"Cancel scan. I want to configure all guarded folders manually", 120, 60, 400, 30);
         else if (backup_state == BackupState::SCAN_COMPLETED || backup_state == BackupState::SCAN_CANCELLED)
             start_backup = std::make_unique<Button>(IDB_START_BACKUP, L"Start backup!", 120, 60, 100, 30);
         if (backup_state == BackupState::SCAN_CANCELLED)

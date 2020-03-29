@@ -7,7 +7,7 @@ const int TREEVIEW_LEVEL_OFFSET = mul_by_system_scaling_factor(16);
 const int DIR_MODE_LEVELS_AUTO = 3;
 
 TabBackup::SortBy TabBackup::sort_by = SortBy::NAME;
-volatile bool TabBackup::stop_scan = false;
+volatile bool TabBackup::stop_scan = false, TabBackup::cancel_scan = false;
 bool popup_menu_is_open = false;
 
 std::unordered_set<std::wstring> always_excluded_directories = {
@@ -343,13 +343,18 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         }
 }
 
+void cancel_scan();
+
 DWORD WINAPI initial_scan(LPVOID)
 {
     GetSystemTimeAsFileTime(&cur_ft);
     for (auto &root_dir_entry : root_dir_entries) {
         enum_files_recursively(root_dir_entry->path, *root_dir_entry, 1);
-        if (TabBackup::stop_scan)
+        if (TabBackup::stop_scan) {
+            if (TabBackup::cancel_scan)
+                cancel_scan();
             return 1;
+        }
     }
 
     // Exclude ‘<UserProfile>\AppData\Local’ and ‘<UserProfile>\AppData\LocalLow’
@@ -405,9 +410,12 @@ POINT pressed_cur_pos;
 bool operator==(const POINT &p1, const POINT &p2) {return memcmp(&p1, &p2, sizeof(POINT)) == 0;}
 DirItem treeview_hover_dir_item = {0};
 int treeview_hover_dir_item_index;
+CriticalSection backup_treeview_cs;
 
 void TabBackup::treeview_paint(HDC hdc, int width, int height)
 {
+    AutoCriticalSection backup_treeview_acs(backup_treeview_cs);
+
     std::vector<DirItem> dirs;
     for (auto &root_dir_entry : root_dir_entries) {
         DirItem di = {&root_dir_entry->name, &*root_dir_entry, 0};
@@ -736,6 +744,38 @@ void TabBackup::treeview_rbdown()
     treeview_hover_dir_item.d = nullptr; // to prevent expanding hover item when clicking outside of context menu in order to just close it
 
     DestroyMenu(menu);
+}
+
+void cancel_scan()
+{
+    backup_treeview_cs.enter();
+    for (auto &root_dir_entry : root_dir_entries) {
+        root_dir_entry = std::make_unique<RootDirEntry>(root_dir_entry->path, root_dir_entry->name);
+        root_dir_entry->mode_auto = DirMode::EXCLUDED;
+    }
+    treeview_hover_dir_item.d = nullptr;
+    backup_treeview_cs.leave();
+
+    backup_state = BackupState::SCAN_CANCELLED;
+    SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // update backup tab
+}
+
+HANDLE initial_scan_thread;
+void restart_scan()
+{
+    backup_treeview_cs.enter();
+    for (auto &root_dir_entry : root_dir_entries)
+        root_dir_entry = std::make_unique<RootDirEntry>(root_dir_entry->path, root_dir_entry->name);
+    root_dir_entries[0]->expanded = true;
+    treeview_hover_dir_item.d = nullptr;
+    backup_treeview_cs.leave();
+
+    TabBackup::stop_scan = false;
+    TabBackup::cancel_scan = false;
+    initial_scan_thread = CreateThread(NULL, 0, initial_scan, NULL, 0, NULL);
+
+    backup_state = BackupState::SCAN_STARTED;
+    SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // update backup tab
 }
 
 char local_backup_drive;

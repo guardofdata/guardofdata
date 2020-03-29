@@ -146,6 +146,16 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
             PostMessage(hwnd, WM_SIZE, 0, 0);
             break;
 
+        case IDB_CANCEL_SCAN:
+            TabBackup::cancel_scan = true; // must be before `stop_scan = true` because `cancel_scan` is checked after `stop_scan` inside `initial_scan()`
+            TabBackup::stop_scan = true;
+            break;
+
+        case IDB_RESTART_SCAN:
+            void restart_scan();
+            restart_scan();
+            break;
+
         case IDB_START_BACKUP:
             DialogBox(h_instance, MAKEINTRESOURCE(IDD_BACKUP_DRIVE_SELECTION), hwnd, backup_drive_selection_dlg_proc);
             break;
@@ -440,7 +450,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         ShowWindow(main_wnd, SW_NORMAL);
 
     DWORD WINAPI initial_scan(LPVOID);
-    HANDLE initial_scan_thread = CreateThread(NULL, 0, initial_scan, NULL, 0, NULL);
+    extern HANDLE initial_scan_thread;
+    initial_scan_thread = CreateThread(NULL, 0, initial_scan, NULL, 0, NULL);
 
     SetTimer(treeview_wnd, 1, 200, NULL);
 

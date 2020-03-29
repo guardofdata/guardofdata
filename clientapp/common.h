@@ -172,3 +172,24 @@ inline std::wstring replace_all(const std::wstring &str, const std::wstring &old
     }
     return s;
 }
+
+class CriticalSection
+{
+    CRITICAL_SECTION cs;
+
+public:
+    CriticalSection() {InitializeCriticalSectionAndSpinCount(&cs, 1);} // [https://stackoverflow.com/a/54949442/2692494 <- google:‘InitializeCriticalSectionAndSpinCount site:stackoverflow.com’]
+    ~CriticalSection() {DeleteCriticalSection(&cs);}
+
+    void enter() {EnterCriticalSection(&cs);}
+    void leave() {LeaveCriticalSection(&cs);}
+};
+
+class AutoCriticalSection
+{
+    CriticalSection &cs;
+
+public:
+    AutoCriticalSection(CriticalSection &cs) : cs(cs) {cs.enter();}
+    ~AutoCriticalSection() {cs.leave();}
+};
