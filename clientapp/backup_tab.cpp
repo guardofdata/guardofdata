@@ -343,6 +343,8 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         }
 }
 
+HANDLE initial_scan_thread;
+
 void cancel_scan();
 
 DWORD WINAPI initial_scan(LPVOID)
@@ -599,6 +601,14 @@ void TabBackup::treeview_rbdown()
         CheckMenuRadioItem(menu, ID_PRIORITY_ULTRAHIGH, ID_PRIORITY_AUTO, treeview_hover_dir_item.d->priority_manual == DIR_PRIORITY_AUTO ? ID_PRIORITY_AUTO : ID_PRIORITY_ULTRAHIGH + (2 - (int)treeview_hover_dir_item.d->priority_manual), MF_BYCOMMAND);
     }
 
+    auto check_if_scan_is_running = []() {
+        if (WaitForSingleObject(initial_scan_thread, 0) == WAIT_TIMEOUT) {
+            MessageBox(main_wnd, L"You can not set mode and priority during scan!", NULL, MB_OK|MB_ICONERROR);
+            return false;
+        }
+        return true;
+    };
+
     HMENU sub_menu = GetSubMenu(menu, 0); // this is necessary (see [http://rsdn.org/article/qna/ui/mnuerr1.xml <- http://rsdn.org/forum/winapi/140595.flat <- google:‘TrackPopupMenu "view as popup"’])
     POINT curpos;
     GetCursorPos(&curpos);
@@ -609,7 +619,7 @@ void TabBackup::treeview_rbdown()
         if (r < ID_SORTBY_NAME + (int)SortBy::COUNT)
             sort_by = SortBy(r - ID_SORTBY_NAME);
         else if (r < ID_MODE_EXCLUDED + (int)DirMode::COUNT) {
-            if (treeview_hover_dir_item.d != nullptr) {
+            if (check_if_scan_is_running() && treeview_hover_dir_item.d != nullptr) {
                 DirMode new_mode = DirMode(r - ID_MODE_EXCLUDED);
                 treeview_hover_dir_item.d->set_mode_manual(new_mode);
 
@@ -704,7 +714,7 @@ void TabBackup::treeview_rbdown()
             }
         }
         else if (r <= ID_PRIORITY_AUTO) {
-            if (treeview_hover_dir_item.d != nullptr) {
+            if (check_if_scan_is_running() && treeview_hover_dir_item.d != nullptr) {
                 float priorities[] = {DIR_PRIORITY_ULTRA_HIGH, DIR_PRIORITY_HIGH, DIR_PRIORITY_NORMAL, DIR_PRIORITY_LOW, DIR_PRIORITY_ULTRA_LOW, DIR_PRIORITY_AUTO};
                 float new_priority = priorities[r - ID_PRIORITY_ULTRAHIGH];
                 treeview_hover_dir_item.d->priority_manual = new_priority;
@@ -760,7 +770,6 @@ void cancel_scan()
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // update backup tab
 }
 
-HANDLE initial_scan_thread;
 void restart_scan()
 {
     backup_treeview_cs.enter();
