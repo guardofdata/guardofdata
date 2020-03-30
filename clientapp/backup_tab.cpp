@@ -904,6 +904,11 @@ void cancel_scan()
 
 void restart_scan()
 {
+    if (scan_thread != NULL) {
+        TabBackup::stop_scan = true;
+        WaitForSingleObject(scan_thread, INFINITE);
+    }
+
     //backup_treeview_cs.enter(); // this is not necessary because `restart_scan()` is called in the same thread as `treeview_paint()`
     for (auto &root_dir_entry : root_dir_entries)
         root_dir_entry = std::make_unique<RootDirEntry>(root_dir_entry->path, root_dir_entry->name);
