@@ -450,7 +450,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         ShowWindow(main_wnd, SW_NORMAL);
 
     DWORD WINAPI initial_scan(LPVOID);
-    extern HANDLE initial_scan_thread;
+    extern HANDLE initial_scan_thread, scan_thread;
     initial_scan_thread = CreateThread(NULL, 0, initial_scan, NULL, 0, NULL);
 
     SetTimer(treeview_wnd, 1, 200, NULL);
@@ -470,6 +470,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
     TabBackup::stop_scan = true;
     WaitForSingleObject(initial_scan_thread, INFINITE);
+    if (scan_thread != NULL)
+        WaitForSingleObject(scan_thread, INFINITE);
     extern bool stop_apply_directory_changes_thread;
     extern HANDLE apply_directory_changes_thread;
     stop_apply_directory_changes_thread = true;

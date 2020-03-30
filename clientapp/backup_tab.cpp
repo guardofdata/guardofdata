@@ -356,7 +356,7 @@ void enum_files_recursively(const std::wstring &dir_name, DirEntry &de, int leve
         }
 }
 
-HANDLE initial_scan_thread;
+HANDLE initial_scan_thread, scan_thread = NULL;
 
 void cancel_scan();
 
@@ -385,6 +385,82 @@ DWORD WINAPI initial_scan(LPVOID)
     SendMessage(main_wnd, WM_COMMAND, IDB_TAB_BACKUP, 0); // needed to update backup tab if it is already active
 
     MessageBox(main_wnd, L"Scan completed. Please configure guarded folders and/or exclude unnecessary ones, and then click ‘Start backup!’ button", L"", MB_OK|MB_ICONINFORMATION);
+    return 0;
+}
+
+void scan_enum_files_recursively(DirEntry &de)
+{
+    de.scan_started = true;
+    de.not_traversed = false;
+
+    WIN32_FIND_DATA fd;
+    HANDLE h = FindFirstFile((de.full_dir_name() / L"*.*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+
+    DirEntry::SubDirs subdirs;
+
+    do
+    {
+        if (TabBackup::stop_scan) {
+            FindClose(h);
+            return;
+        }
+
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM)
+            continue;
+
+        if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_REPARSE_POINT)) // skip hidden files and directories and symbolic links
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && (wcscmp(fd.cFileName, L".git") == 0 || wcscmp(fd.cFileName, L"AppData") == 0))
+                ASSERT((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
+            else
+                continue;
+
+        std::wstring file_name(fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (file_name == L"." || file_name == L"..")
+                continue;
+            if (!de.parent && always_excluded_directories.find(file_name) != always_excluded_directories.end())
+                continue;
+
+            if (de.subdirs.empty()) { // acquiring of `subdirs_lock` is not necessary here because `treeview_paint()` in other thread just read (i.e. does not write) `subdirs`
+                auto it = subdirs.emplace(file_name, DirEntry());
+                it.first->second.parent = &de;
+                it.first->second.dir_name = &it.first->first;
+            }
+        }
+        else {
+            de.dir_files_size += (uint64_t(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
+            de.dir_num_of_files++;
+        }
+    } while (FindNextFile(h, &fd));
+
+    FindClose(h);
+
+    de.size += de.dir_files_size;
+    de.num_of_files += de.dir_num_of_files;
+
+    if (de.subdirs.empty()) {
+        de.subdirs_lock.acquire();
+        de.subdirs = std::move(subdirs);
+        de.subdirs_lock.release();
+    }
+
+    for (DirEntry *pde = de.parent; pde != nullptr; pde = pde->parent) {
+        pde->size += de.size;
+        pde->num_of_files += de.num_of_files;
+    }
+
+    for (auto &&sd : de.subdirs) {
+        if (TabBackup::stop_scan)
+            return;
+        if (!sd.second.scan_started)
+            scan_enum_files_recursively(sd.second);
+    }
+}
+
+DWORD WINAPI scan_thread_proc(LPVOID p)
+{
+    scan_enum_files_recursively(*(DirEntry*)p);
     return 0;
 }
 
@@ -492,7 +568,7 @@ void TabBackup::treeview_paint(HDC hdc, int width, int height)
         if (r.bottom >= TREEVIEW_PADDING) { // this check is not only for better performance, but is also to avoid artifacts at the top of tree view after scrollbar down button pressed
             r.right = width - TREEVIEW_PADDING - LINE_PADDING_RIGHT;
             r.left = r.right - DIR_SIZE_COLUMN_WIDTH;
-            if (d.d->scan_started) {
+            if (d.d->scan_started || d.d->num_of_files != 0) {
                 const int MB = 1024 * 1024;
                 //char s[32];
                 //sprintf_s(s, d.second->size >= 100*MB ? "%.0f" : d.second->size >= 10*MB ? "%.1f" : d.second->size >= MB ? "%.2f" : "%.3f", d.second->size / double(MB));
@@ -649,7 +725,8 @@ void TabBackup::treeview_rbdown()
     }
 
     auto check_if_scan_is_running = []() {
-        if (WaitForSingleObject(initial_scan_thread, 0) == WAIT_TIMEOUT) {
+        if (WaitForSingleObject(initial_scan_thread, 0) == WAIT_TIMEOUT || (scan_thread != NULL &&
+            WaitForSingleObject(        scan_thread, 0) == WAIT_TIMEOUT)) {
             MessageBox(main_wnd, L"You can not set mode and priority during scan!", NULL, MB_OK|MB_ICONERROR);
             return false;
         }
@@ -757,6 +834,13 @@ void TabBackup::treeview_rbdown()
                                                                                                               L"There is 1 sub-entry which mode is not auto.\nWould you like to switch its mode also?", L"", MB_YESNO) == IDYES)
                             for (auto &&de : non_auto)
                                 de->set_mode_manual(DirMode::AUTO);
+                }
+
+                if (treeview_hover_dir_item.d->mode_no_ifp() != DirMode::EXCLUDED && !treeview_hover_dir_item.d->scan_started) {
+                    if (scan_thread != NULL)
+                        CloseHandle(scan_thread);
+                    TabBackup::stop_scan = false;
+                    scan_thread = CreateThread(NULL, 0, scan_thread_proc, treeview_hover_dir_item.d, 0, NULL);
                 }
             }
         }
