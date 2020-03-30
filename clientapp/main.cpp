@@ -157,7 +157,11 @@ LRESULT CALLBACK main_wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
             break;
 
         case IDB_START_BACKUP:
-            DialogBox(h_instance, MAKEINTRESOURCE(IDD_BACKUP_DRIVE_SELECTION), hwnd, backup_drive_selection_dlg_proc);
+            extern HANDLE scan_thread;
+            if (scan_thread != NULL && WaitForSingleObject(scan_thread, 0) == WAIT_TIMEOUT)
+                MessageBox(main_wnd, L"You can not start backup during scan!", NULL, MB_OK|MB_ICONERROR);
+            else
+                DialogBox(h_instance, MAKEINTRESOURCE(IDD_BACKUP_DRIVE_SELECTION), hwnd, backup_drive_selection_dlg_proc);
             break;
         }
         return 0;
